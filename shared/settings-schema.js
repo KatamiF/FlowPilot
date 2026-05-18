@@ -35,8 +35,8 @@
     const defaultFlowId = String(
       deps.defaultFlowId || flowRegistry.DEFAULT_FLOW_ID || 'openai'
     ).trim().toLowerCase() || 'openai';
-    const defaultOpenAiIntegrationTargetId = flowRegistry.DEFAULT_OPENAI_INTEGRATION_TARGET_ID || 'cpa';
-    const defaultKiroIntegrationTargetId = flowRegistry.DEFAULT_KIRO_INTEGRATION_TARGET_ID || 'kiro-rs';
+    const defaultOpenAiTargetId = flowRegistry.DEFAULT_OPENAI_TARGET_ID || 'cpa';
+    const defaultKiroTargetId = flowRegistry.DEFAULT_KIRO_TARGET_ID || 'kiro-rs';
     const defaultKiroRsUrl = flowRegistry.DEFAULT_KIRO_RS_URL || 'https://kiro.leftcode.xyz/admin';
     const normalizeFlowId = typeof flowRegistry.normalizeFlowId === 'function'
       ? flowRegistry.normalizeFlowId
@@ -44,8 +44,8 @@
         const normalized = String(value || '').trim().toLowerCase();
         return normalized || String(fallback || '').trim().toLowerCase() || defaultFlowId;
       });
-    const normalizeIntegrationTargetId = typeof flowRegistry.normalizeIntegrationTargetId === 'function'
-      ? flowRegistry.normalizeIntegrationTargetId
+    const normalizeTargetId = typeof flowRegistry.normalizeTargetId === 'function'
+      ? flowRegistry.normalizeTargetId
       : ((_flowId, value = '', fallback = '') => String(value || fallback || '').trim().toLowerCase());
 
     function buildDefaultSettingsState() {
@@ -67,7 +67,7 @@
         },
         flows: {
           openai: {
-            integrationTargetId: defaultOpenAiIntegrationTargetId,
+            integrationTargetId: defaultOpenAiTargetId,
             integrationTargets: {
               cpa: {
                 vpsUrl: '',
@@ -106,8 +106,8 @@
             },
           },
           kiro: {
-            integrationTargetId: defaultKiroIntegrationTargetId,
-            integrationTargets: {
+            targetId: defaultKiroTargetId,
+            targets: {
               'kiro-rs': {
                 baseUrl: defaultKiroRsUrl,
                 apiKey: '',
@@ -117,7 +117,7 @@
               stepExecutionRange: {
                 enabled: false,
                 fromStep: 1,
-                toStep: 7,
+                toStep: 9,
               },
             },
           },
@@ -141,7 +141,7 @@
         ?? defaults.activeFlowId,
         defaults.activeFlowId
       );
-      const openaiIntegrationTargetId = normalizeIntegrationTargetId(
+      const openaiIntegrationTargetId = normalizeTargetId(
         'openai',
         nested?.flows?.openai?.integrationTargetId
           ?? input?.openaiIntegrationTargetId
@@ -149,13 +149,12 @@
           ?? defaults.flows.openai.integrationTargetId,
         defaults.flows.openai.integrationTargetId
       );
-      const kiroIntegrationTargetId = normalizeIntegrationTargetId(
+      const kiroTargetId = normalizeTargetId(
         'kiro',
-        nested?.flows?.kiro?.integrationTargetId
-          ?? input?.kiroIntegrationTargetId
-          ?? input?.kiroSourceId
-          ?? defaults.flows.kiro.integrationTargetId,
-        defaults.flows.kiro.integrationTargetId
+        nested?.flows?.kiro?.targetId
+          ?? input?.kiroTargetId
+          ?? defaults.flows.kiro.targetId,
+        defaults.flows.kiro.targetId
       );
       const stepExecutionRangeByFlow = isPlainObject(input?.stepExecutionRangeByFlow)
         ? input.stepExecutionRangeByFlow
@@ -313,22 +312,22 @@
             },
           },
           kiro: {
-            integrationTargetId: kiroIntegrationTargetId,
-            integrationTargets: {
+            targetId: kiroTargetId,
+            targets: {
               'kiro-rs': {
-                ...defaults.flows.kiro.integrationTargets['kiro-rs'],
-                ...getIntegrationTargetValue(nested, (state) => state.flows?.kiro?.integrationTargets?.['kiro-rs']),
+                ...defaults.flows.kiro.targets['kiro-rs'],
+                ...getIntegrationTargetValue(nested, (state) => state.flows?.kiro?.targets?.['kiro-rs']),
                 baseUrl: String(
                   input?.kiroRsUrl
                   ?? input?.kiroRsBaseUrl
-                  ?? nested?.flows?.kiro?.integrationTargets?.['kiro-rs']?.baseUrl
-                  ?? defaults.flows.kiro.integrationTargets['kiro-rs'].baseUrl
-                ).trim() || defaults.flows.kiro.integrationTargets['kiro-rs'].baseUrl,
+                  ?? nested?.flows?.kiro?.targets?.['kiro-rs']?.baseUrl
+                  ?? defaults.flows.kiro.targets['kiro-rs'].baseUrl
+                ).trim() || defaults.flows.kiro.targets['kiro-rs'].baseUrl,
                 apiKey: String(
                   input?.kiroRsKey
                   ?? input?.kiroRsApiKey
-                  ?? nested?.flows?.kiro?.integrationTargets?.['kiro-rs']?.apiKey
-                  ?? defaults.flows.kiro.integrationTargets['kiro-rs'].apiKey
+                  ?? nested?.flows?.kiro?.targets?.['kiro-rs']?.apiKey
+                  ?? defaults.flows.kiro.targets['kiro-rs'].apiKey
                 ),
               },
             },
@@ -379,16 +378,21 @@
       return cloneValue(normalizedState?.flows?.[normalizedFlowId] || {});
     }
 
-    function getSelectedIntegrationTargetId(settingsState = {}, flowId) {
+    function getSelectedTargetId(settingsState = {}, flowId) {
       const normalizedState = normalizeSettingsState(settingsState);
       const normalizedFlowId = normalizeFlowId(flowId, normalizedState.activeFlowId);
       const flowSettings = normalizedState?.flows?.[normalizedFlowId] || {};
-      return normalizeIntegrationTargetId(
+      if (normalizedFlowId === 'kiro') {
+        return normalizeTargetId(
+          normalizedFlowId,
+          flowSettings?.targetId,
+          defaultKiroTargetId
+        );
+      }
+      return normalizeTargetId(
         normalizedFlowId,
         flowSettings?.integrationTargetId,
-        normalizedFlowId === 'kiro'
-          ? defaultKiroIntegrationTargetId
-          : defaultOpenAiIntegrationTargetId
+        defaultOpenAiTargetId
       );
     }
 
@@ -414,10 +418,9 @@
       const openaiState = normalizedState.flows.openai;
       const kiroState = normalizedState.flows.kiro;
       next.activeFlowId = normalizedState.activeFlowId;
-      next.openaiIntegrationTargetId = getSelectedIntegrationTargetId(normalizedState, 'openai');
-      next.kiroIntegrationTargetId = getSelectedIntegrationTargetId(normalizedState, 'kiro');
+      next.openaiIntegrationTargetId = getSelectedTargetId(normalizedState, 'openai');
+      next.kiroTargetId = getSelectedTargetId(normalizedState, 'kiro');
       next.panelMode = next.openaiIntegrationTargetId;
-      next.kiroSourceId = next.kiroIntegrationTargetId;
       next.vpsUrl = openaiState.integrationTargets.cpa.vpsUrl;
       next.vpsPassword = openaiState.integrationTargets.cpa.vpsPassword;
       next.localCpaStep9Mode = openaiState.integrationTargets.cpa.localCpaStep9Mode;
@@ -440,8 +443,8 @@
       next.ipProxyEnabled = normalizedState.services.proxy.enabled;
       next.ipProxyService = normalizedState.services.proxy.provider;
       next.ipProxyMode = normalizedState.services.proxy.mode;
-      next.kiroRsUrl = kiroState.integrationTargets['kiro-rs'].baseUrl;
-      next.kiroRsKey = kiroState.integrationTargets['kiro-rs'].apiKey;
+      next.kiroRsUrl = kiroState.targets['kiro-rs'].baseUrl;
+      next.kiroRsKey = kiroState.targets['kiro-rs'].apiKey;
       next.stepExecutionRangeByFlow = buildStepExecutionRangeByFlow(normalizedState);
       next.settingsSchemaVersion = normalizedState.schemaVersion;
       next.settingsState = cloneValue(normalizedState);
@@ -451,18 +454,18 @@
     function getFlowInputState(settingsState = {}, flowId) {
       const normalizedState = normalizeSettingsState(settingsState);
       const normalizedFlowId = normalizeFlowId(flowId, normalizedState.activeFlowId);
-      const integrationTargetId = getSelectedIntegrationTargetId(normalizedState, normalizedFlowId);
+      const targetId = getSelectedTargetId(normalizedState, normalizedFlowId);
       if (normalizedFlowId === 'kiro') {
         return {
           activeFlowId: normalizedFlowId,
-          integrationTargetId,
-          kiroRsUrl: normalizedState.flows.kiro.integrationTargets['kiro-rs'].baseUrl,
-          kiroRsKey: normalizedState.flows.kiro.integrationTargets['kiro-rs'].apiKey,
+          targetId,
+          kiroRsUrl: normalizedState.flows.kiro.targets['kiro-rs'].baseUrl,
+          kiroRsKey: normalizedState.flows.kiro.targets['kiro-rs'].apiKey,
         };
       }
       return {
         activeFlowId: normalizedFlowId,
-        integrationTargetId,
+        targetId,
       };
     }
 
@@ -472,7 +475,7 @@
       buildStepExecutionRangeByFlow,
       getFlowInputState,
       getFlowSettings,
-      getSelectedIntegrationTargetId,
+      getSelectedTargetId,
       mergeSettingsState,
       normalizeSettingsState,
     };

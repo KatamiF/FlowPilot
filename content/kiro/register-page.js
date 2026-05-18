@@ -1,6 +1,6 @@
-console.log('[MultiPage:kiro-device-auth] Content script loaded on', location.href);
+console.log('[MultiPage:kiro-register-page] Content script loaded on', location.href);
 
-const KIRO_DEVICE_AUTH_LISTENER_SENTINEL = 'data-multipage-kiro-device-auth-listener';
+const KIRO_REGISTER_PAGE_LISTENER_SENTINEL = 'data-multipage-kiro-register-page-listener';
 const KIRO_CONTINUE_TEXT_PATTERN = /continue|继续/i;
 const KIRO_CONFIRM_CONTINUE_TEXT_PATTERN = /confirm and continue|确认并继续/i;
 const KIRO_ALLOW_ACCESS_TEXT_PATTERN = /allow access|允许访问/i;
@@ -48,10 +48,10 @@ const KIRO_CONFIRM_PASSWORD_SELECTOR = [
   'input[id*="confirm" i]',
 ].join(', ');
 
-function isVisibleKiroElement(el) {
-  if (!el) return false;
-  const style = window.getComputedStyle(el);
-  const rect = el.getBoundingClientRect();
+function isVisibleKiroElement(element) {
+  if (!element) return false;
+  const style = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
   return style.display !== 'none'
     && style.visibility !== 'hidden'
     && rect.width > 0
@@ -66,20 +66,20 @@ function getKiroPageText() {
 
 function collectVisibleElements(selector) {
   return Array.from(document.querySelectorAll(selector))
-    .filter((el) => isVisibleKiroElement(el));
+    .filter((element) => isVisibleKiroElement(element));
 }
 
 function findFirstVisible(selector) {
   return collectVisibleElements(selector)[0] || null;
 }
 
-function getElementActionText(el) {
+function getElementActionText(element) {
   return [
-    el?.textContent,
-    el?.value,
-    el?.getAttribute?.('aria-label'),
-    el?.getAttribute?.('title'),
-    el?.getAttribute?.('data-testid'),
+    element?.textContent,
+    element?.value,
+    element?.getAttribute?.('aria-label'),
+    element?.getAttribute?.('title'),
+    element?.getAttribute?.('data-testid'),
   ]
     .filter(Boolean)
     .join(' ')
@@ -102,15 +102,15 @@ function findActionButton(options = {}) {
   }
 
   const candidates = collectVisibleElements('button, [role="button"], input[type="submit"], input[type="button"]')
-    .filter((el) => !el.disabled && el.getAttribute('aria-disabled') !== 'true');
+    .filter((element) => !element.disabled && element.getAttribute('aria-disabled') !== 'true');
 
   const prioritized = formOwner
-    ? candidates.filter((el) => (el.form || el.closest?.('form') || null) === formOwner)
+    ? candidates.filter((element) => (element.form || element.closest?.('form') || null) === formOwner)
     : [];
   const pool = prioritized.length ? prioritized : candidates;
 
   if (textPattern instanceof RegExp) {
-    return pool.find((el) => textPattern.test(getElementActionText(el))) || null;
+    return pool.find((element) => textPattern.test(getElementActionText(element))) || null;
   }
 
   return pool[0] || null;
@@ -209,7 +209,7 @@ function detectKiroFatalPageState(pageText = '', currentUrl = '', pageTitle = ''
     return {
       state: 'cloudfront_403_page',
       url: currentUrl,
-      fatalMessage: 'Kiro 注册页返回 403（CloudFront 拒绝请求），通常是当前代理/IP/区域触发了 AWS 风控，请更换代理后重试。',
+      fatalMessage: 'Kiro 注册页返回 403（CloudFront 拒绝请求），通常是当前代理 IP 或区域触发了 AWS 风控，请更换代理后重试。',
     };
   }
 
@@ -226,13 +226,13 @@ function getKiroFatalStateMessage(snapshot = {}) {
   }
   switch (snapshot?.state) {
     case 'cloudfront_403_page':
-      return 'Kiro 注册页返回 403（CloudFront 拒绝请求），通常是当前代理/IP/区域触发了 AWS 风控，请更换代理后重试。';
+      return 'Kiro 注册页返回 403（CloudFront 拒绝请求），通常是当前代理 IP 或区域触发了 AWS 风控，请更换代理后重试。';
     default:
       return `Kiro 页面出现异常状态：${snapshot?.state || 'unknown'}`;
   }
 }
 
-function detectKiroPageState() {
+function detectKiroRegisterPageState() {
   const pageText = getKiroPageText();
   const currentUrl = location.href;
   const fatalState = detectKiroFatalPageState(pageText, currentUrl, document.title || '');
@@ -267,7 +267,7 @@ function detectKiroPageState() {
 
   if (
     KIRO_SUCCESS_TEXT_PATTERN.test(pageText)
-    || /request approved|access your data|请求已批准|访问您的数据/i.test(pageText)
+    || /request approved|access your data|请求已批准|访问你的数据/i.test(pageText)
   ) {
     return {
       state: 'success_page',
@@ -318,7 +318,7 @@ async function waitForKiroState(predicate, options = {}) {
 
   while (Date.now() - start < timeoutMs) {
     throwIfStopped();
-    const detected = detectKiroPageState();
+    const detected = detectKiroRegisterPageState();
     if (isKiroFatalState(detected.state)) {
       throw new Error(getKiroFatalStateMessage(detected));
     }
@@ -328,14 +328,14 @@ async function waitForKiroState(predicate, options = {}) {
     await sleep(retryDelayMs);
   }
 
-  const finalState = detectKiroPageState();
+  const finalState = detectKiroRegisterPageState();
   if (isKiroFatalState(finalState.state)) {
     throw new Error(getKiroFatalStateMessage(finalState));
   }
   throw new Error(options.timeoutMessage || `等待 Kiro 页面状态超时：${finalState.state}`);
 }
 
-async function ensureKiroPageState(payload = {}) {
+async function ensureKiroRegisterPageState(payload = {}) {
   const targetStates = Array.isArray(payload?.targetStates)
     ? payload.targetStates.map((entry) => String(entry || '').trim()).filter(Boolean)
     : [];
@@ -353,7 +353,7 @@ async function ensureKiroPageState(payload = {}) {
   );
 }
 
-async function waitForKiroStateChange(payload = {}) {
+async function waitForKiroRegisterStateChange(payload = {}) {
   const fromStates = Array.isArray(payload?.fromStates)
     ? payload.fromStates.map((entry) => String(entry || '').trim()).filter(Boolean)
     : [];
@@ -400,10 +400,10 @@ async function waitForKiroAuthorizationAdvance(previousState = {}, options = {})
 async function submitKiroEmail(payload = {}) {
   const email = String(payload?.email || '').trim();
   if (!email) {
-    throw new Error('缺少 Kiro 授权邮箱，无法继续提交。');
+    throw new Error('缺少 Kiro 注册邮箱，无法继续提交。');
   }
 
-  const readyState = await ensureKiroPageState({
+  const readyState = await ensureKiroRegisterPageState({
     targetStates: ['email_entry'],
     timeoutMs: payload?.timeoutMs || 30000,
     retryDelayMs: payload?.retryDelayMs || 250,
@@ -428,7 +428,7 @@ async function submitKiroName(payload = {}) {
     throw new Error('缺少 Kiro 注册姓名，无法继续提交。');
   }
 
-  const readyState = await ensureKiroPageState({
+  const readyState = await ensureKiroRegisterPageState({
     targetStates: ['name_entry'],
     timeoutMs: payload?.timeoutMs || 30000,
     retryDelayMs: payload?.retryDelayMs || 250,
@@ -453,7 +453,7 @@ async function submitKiroVerificationCode(payload = {}) {
     throw new Error('缺少 Kiro 邮箱验证码，无法继续提交。');
   }
 
-  const readyState = await ensureKiroPageState({
+  const readyState = await ensureKiroRegisterPageState({
     targetStates: ['otp_page'],
     timeoutMs: payload?.timeoutMs || 30000,
     retryDelayMs: payload?.retryDelayMs || 250,
@@ -478,7 +478,7 @@ async function submitKiroPassword(payload = {}) {
     throw new Error('缺少 Kiro 账户密码，无法继续提交。');
   }
 
-  const readyState = await ensureKiroPageState({
+  const readyState = await ensureKiroRegisterPageState({
     targetStates: ['password_page'],
     timeoutMs: payload?.timeoutMs || 30000,
     retryDelayMs: payload?.retryDelayMs || 250,
@@ -508,8 +508,8 @@ async function submitKiroPassword(payload = {}) {
   };
 }
 
-async function confirmKiroAccess(payload = {}) {
-  let currentState = await ensureKiroPageState({
+async function confirmKiroRegisterConsent(payload = {}) {
+  let currentState = await ensureKiroRegisterPageState({
     targetStates: ['authorization_page', 'success_page'],
     timeoutMs: payload?.timeoutMs || 45000,
     retryDelayMs: payload?.retryDelayMs || 250,
@@ -546,12 +546,12 @@ async function confirmKiroAccess(payload = {}) {
   };
 }
 
-async function handleKiroDeviceAuthCommand(message) {
+async function handleKiroRegisterCommand(message) {
   switch (message.type) {
     case 'ENSURE_KIRO_PAGE_STATE':
-      return ensureKiroPageState(message.payload || {});
+      return ensureKiroRegisterPageState(message.payload || {});
     case 'ENSURE_KIRO_STATE_CHANGE':
-      return waitForKiroStateChange(message.payload || {});
+      return waitForKiroRegisterStateChange(message.payload || {});
     case 'EXECUTE_NODE': {
       const nodeId = String(message.nodeId || message.payload?.nodeId || '').trim();
       if (nodeId === 'kiro-submit-email') {
@@ -563,21 +563,21 @@ async function handleKiroDeviceAuthCommand(message) {
       if (nodeId === 'kiro-submit-verification-code') {
         return submitKiroVerificationCode(message.payload || {});
       }
-      if (nodeId === 'kiro-fill-password') {
+      if (nodeId === 'kiro-submit-password') {
         return submitKiroPassword(message.payload || {});
       }
-      if (nodeId === 'kiro-confirm-access') {
-        return confirmKiroAccess(message.payload || {});
+      if (nodeId === 'kiro-complete-register-consent') {
+        return confirmKiroRegisterConsent(message.payload || {});
       }
-      throw new Error(`kiro-device-auth-page.js 不处理节点：${nodeId}`);
+      throw new Error(`register-page.js 不处理节点：${nodeId}`);
     }
     default:
       return null;
   }
 }
 
-if (document.documentElement.getAttribute(KIRO_DEVICE_AUTH_LISTENER_SENTINEL) !== '1') {
-  document.documentElement.setAttribute(KIRO_DEVICE_AUTH_LISTENER_SENTINEL, '1');
+if (document.documentElement.getAttribute(KIRO_REGISTER_PAGE_LISTENER_SENTINEL) !== '1') {
+  document.documentElement.setAttribute(KIRO_REGISTER_PAGE_LISTENER_SENTINEL, '1');
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (
       message.type === 'ENSURE_KIRO_PAGE_STATE'
@@ -585,7 +585,7 @@ if (document.documentElement.getAttribute(KIRO_DEVICE_AUTH_LISTENER_SENTINEL) !=
       || message.type === 'EXECUTE_NODE'
     ) {
       resetStopState();
-      handleKiroDeviceAuthCommand(message)
+      handleKiroRegisterCommand(message)
         .then((result) => {
           sendResponse({ ok: true, ...(result || {}) });
         })

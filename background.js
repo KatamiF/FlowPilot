@@ -24,6 +24,11 @@ importScripts(
   'background/registration-email-state.js',
   'background/workflow-engine.js',
   'background/runtime-state.js',
+  'background/kiro/state.js',
+  'background/kiro/register-runner.js',
+  'background/kiro/desktop-client.js',
+  'background/kiro/desktop-authorize-runner.js',
+  'background/kiro/publisher-kiro-rs.js',
   'background/generated-email-helpers.js',
   'background/signup-flow-helpers.js',
   'background/mail-rule-registry.js',
@@ -53,7 +58,6 @@ importScripts(
   'background/steps/fetch-login-code.js',
   'background/steps/confirm-oauth.js',
   'background/steps/platform-verify.js',
-  'background/steps/kiro-device-auth.js',
   'data/names.js',
   'hotmail-utils.js',
   'microsoft-email.js',
@@ -321,6 +325,7 @@ const runtimeStateHelpers = self.MultiPageBackgroundRuntimeState?.createRuntimeS
   DEFAULT_ACTIVE_FLOW_ID,
   defaultNodeStatuses: DEFAULT_NODE_STATUSES,
 }) || null;
+const kiroStateHelpers = self.MultiPageBackgroundKiroState || null;
 const DEFAULT_REGISTRATION_EMAIL_STATE = registrationEmailStateHelpers?.DEFAULT_REGISTRATION_EMAIL_STATE || {
   current: '',
   previous: '',
@@ -386,17 +391,31 @@ function getPreservedPhoneIdentity(state = {}) {
 }
 
 function buildStateViewWithRuntimeState(state = {}) {
+  let nextState = state;
   if (runtimeStateHelpers?.buildStateView) {
-    return runtimeStateHelpers.buildStateView(state);
+    nextState = runtimeStateHelpers.buildStateView(nextState);
   }
-  return state;
+  if (kiroStateHelpers?.buildStateView) {
+    nextState = kiroStateHelpers.buildStateView(nextState);
+  }
+  return nextState;
 }
 
 function buildStatePatchWithRuntimeState(currentState = {}, updates = {}) {
+  let nextPatch = updates;
   if (runtimeStateHelpers?.buildSessionStatePatch) {
-    return runtimeStateHelpers.buildSessionStatePatch(currentState, updates);
+    nextPatch = runtimeStateHelpers.buildSessionStatePatch(currentState, nextPatch);
   }
-  return updates;
+  if (kiroStateHelpers?.buildSessionStatePatch) {
+    const kiroPatch = kiroStateHelpers.buildSessionStatePatch(currentState, updates);
+    if (kiroPatch && Object.keys(kiroPatch).length > 0) {
+      nextPatch = {
+        ...nextPatch,
+        ...kiroPatch,
+      };
+    }
+  }
+  return nextPatch;
 }
 
 function statePatchHasChanges(state = {}, patch = {}) {
@@ -892,7 +911,7 @@ function setupDeclarativeNetRequestRules() {
 const PERSISTED_SETTING_DEFAULTS = {
   panelMode: 'cpa',
   activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
-  kiroSourceId: 'kiro-rs',
+  kiroTargetId: 'kiro-rs',
   kiroRsUrl: self.MultiPageFlowRegistry?.DEFAULT_KIRO_RS_URL || 'https://kiro.leftcode.xyz/admin',
   kiroRsKey: '',
   vpsUrl: '',
@@ -1080,9 +1099,8 @@ const PERSISTED_SETTINGS_SCHEMA_KEYS = ['settingsSchemaVersion', 'settingsState'
 const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
   'activeFlowId',
   'openaiIntegrationTargetId',
-  'kiroIntegrationTargetId',
   'panelMode',
-  'kiroSourceId',
+  'kiroTargetId',
   'vpsUrl',
   'vpsPassword',
   'localCpaStep9Mode',
@@ -1122,6 +1140,7 @@ const DEFAULT_STATE = {
   currentNodeId: '',
   nodeStatuses: { ...DEFAULT_NODE_STATUSES },
   runtimeState: runtimeStateHelpers?.buildDefaultRuntimeState?.() || null,
+  kiroRuntime: kiroStateHelpers?.buildDefaultRuntimeState?.() || null,
   ...CONTRIBUTION_RUNTIME_DEFAULTS,
   accounts: [], // 已生成账号记录：{ email, password, createdAt }。
   accountRunHistory: [], // 账号运行历史快照，实际持久化在 chrome.storage.local。
@@ -2743,9 +2762,9 @@ function normalizePersistentSettingValue(key, value) {
         return self.MultiPageFlowRegistry.normalizeFlowId(value, DEFAULT_ACTIVE_FLOW_ID);
       }
       return String(value || '').trim().toLowerCase() === 'kiro' ? 'kiro' : DEFAULT_ACTIVE_FLOW_ID;
-    case 'kiroSourceId':
-      if (typeof self.MultiPageFlowRegistry?.normalizeSourceId === 'function') {
-        return self.MultiPageFlowRegistry.normalizeSourceId('kiro', value, 'kiro-rs');
+    case 'kiroTargetId':
+      if (typeof self.MultiPageFlowRegistry?.normalizeTargetId === 'function') {
+        return self.MultiPageFlowRegistry.normalizeTargetId('kiro', value, 'kiro-rs');
       }
       return String(value || '').trim().toLowerCase() === 'kiro-rs' ? 'kiro-rs' : 'kiro-rs';
     case 'kiroRsUrl':
@@ -3419,6 +3438,7 @@ function collectAutoRunFreshResetRuntimeSettingKeys() {
   const sharedRuntimeFieldGroups = [
     runtimeStateHelpers?.RUNTIME_SHARED_FIELDS,
     runtimeStateHelpers?.RUNTIME_PROXY_FIELDS,
+    kiroStateHelpers?.FLAT_FIELD_KEYS,
   ];
   for (const fields of sharedRuntimeFieldGroups) {
     if (!Array.isArray(fields)) {
@@ -3465,7 +3485,7 @@ function buildAutoRunFreshResetSettingsState(prevState = {}, activeFlowId = DEFA
           : undefined,
       },
       kiro: {
-        integrationTargetId: prevState?.kiroIntegrationTargetId || prevState?.kiroSourceId,
+        targetId: prevState?.kiroTargetId,
         autoRun: normalizedStepExecutionRangeByFlow.kiro
           ? {
             stepExecutionRange: normalizedStepExecutionRangeByFlow.kiro,
@@ -3510,10 +3530,12 @@ function buildFreshAutoRunKeepState(prevState = {}) {
   if (Object.prototype.hasOwnProperty.call(sourceState, 'panelMode')) {
     keepState.panelMode = normalizePanelMode(sourceState.panelMode);
   }
-  if (Object.prototype.hasOwnProperty.call(sourceState, 'kiroSourceId')) {
-    keepState.kiroSourceId = self.MultiPageFlowRegistry?.normalizeSourceId
-      ? self.MultiPageFlowRegistry.normalizeSourceId('kiro', sourceState.kiroSourceId, 'kiro-rs')
-      : String(sourceState.kiroSourceId || 'kiro-rs').trim().toLowerCase();
+  if (typeof kiroStateHelpers?.buildFreshKeepState === 'function') {
+    Object.assign(keepState, kiroStateHelpers.buildFreshKeepState(sourceState));
+  } else if (Object.prototype.hasOwnProperty.call(sourceState, 'kiroTargetId')) {
+    keepState.kiroTargetId = self.MultiPageFlowRegistry?.normalizeTargetId
+      ? self.MultiPageFlowRegistry.normalizeTargetId('kiro', sourceState.kiroTargetId, 'kiro-rs')
+      : String(sourceState.kiroTargetId || 'kiro-rs').trim().toLowerCase();
   }
   if (Object.prototype.hasOwnProperty.call(sourceState, 'settingsSchemaVersion')) {
     keepState.settingsSchemaVersion = Number(sourceState.settingsSchemaVersion) || 0;
@@ -8995,113 +9017,16 @@ function hasSavedProgress(statuses = {}, stateOverride = null) {
 
 function getDownstreamStateResets(step, state = {}) {
   const stepKey = getStepExecutionKeyForState(step, state);
-  if (stepKey === 'kiro-start-device-login') {
-    return {
-      flowStartTime: null,
-      kiroAccessToken: '',
-      kiroAuthError: '',
-      kiroAuthExpiresAt: 0,
-      kiroAuthIntervalSeconds: 0,
-      kiroAuthRegion: '',
-      kiroAuthStatus: '',
-      kiroAuthTabId: null,
-      kiroAuthorizedEmail: '',
-      kiroClientId: '',
-      kiroClientSecret: '',
-      kiroCredentialId: null,
-      kiroDeviceAuthorizationCode: '',
-      kiroDeviceCode: '',
-      kiroFullName: '',
-      kiroLastConnectionMessage: '',
-      kiroLastUploadAt: 0,
-      kiroLoginUrl: '',
-      kiroRefreshToken: '',
-      kiroUploadError: '',
-      kiroUploadStatus: '',
-      kiroUserCode: '',
-      kiroVerificationRequestedAt: 0,
-      kiroVerificationUri: '',
-      kiroVerificationUriComplete: '',
-    };
-  }
-  if (stepKey === 'kiro-submit-email') {
-    return {
-      kiroAccessToken: '',
-      kiroAuthError: '',
-      kiroAuthStatus: 'waiting_user',
-      kiroAuthorizedEmail: '',
-      kiroCredentialId: null,
-      kiroFullName: '',
-      kiroLastConnectionMessage: '',
-      kiroLastUploadAt: 0,
-      kiroRefreshToken: '',
-      kiroUploadError: '',
-      kiroUploadStatus: 'waiting_login',
-      kiroVerificationRequestedAt: 0,
-    };
-  }
-  if (stepKey === 'kiro-submit-name') {
-    return {
-      kiroAccessToken: '',
-      kiroAuthError: '',
-      kiroAuthStatus: 'waiting_user',
-      kiroCredentialId: null,
-      kiroFullName: '',
-      kiroLastConnectionMessage: '',
-      kiroLastUploadAt: 0,
-      kiroRefreshToken: '',
-      kiroUploadError: '',
-      kiroUploadStatus: 'waiting_login',
-      kiroVerificationRequestedAt: 0,
-    };
-  }
-  if (stepKey === 'kiro-submit-verification-code') {
-    return {
-      kiroAccessToken: '',
-      kiroAuthError: '',
-      kiroAuthStatus: 'waiting_user',
-      kiroCredentialId: null,
-      kiroLastConnectionMessage: '',
-      kiroLastUploadAt: 0,
-      kiroRefreshToken: '',
-      kiroUploadError: '',
-      kiroUploadStatus: 'waiting_login',
-    };
-  }
-  if (stepKey === 'kiro-fill-password') {
-    return {
-      kiroAccessToken: '',
-      kiroAuthError: '',
-      kiroAuthStatus: 'waiting_user',
-      kiroCredentialId: null,
-      kiroLastConnectionMessage: '',
-      kiroLastUploadAt: 0,
-      kiroRefreshToken: '',
-      kiroUploadError: '',
-      kiroUploadStatus: 'waiting_login',
-    };
-  }
-  if (stepKey === 'kiro-confirm-access') {
-    return {
-      kiroAccessToken: '',
-      kiroAuthError: '',
-      kiroAuthStatus: 'waiting_user',
-      kiroCredentialId: null,
-      kiroLastConnectionMessage: '',
-      kiroLastUploadAt: 0,
-      kiroRefreshToken: '',
-      kiroUploadError: '',
-      kiroUploadStatus: 'waiting_login',
-    };
-  }
-  if (stepKey === 'kiro-upload-credential') {
-    return {
-      kiroCredentialId: null,
-      kiroLastConnectionMessage: '',
-      kiroLastUploadAt: 0,
-      kiroUploadError: '',
-      kiroUploadStatus: 'ready_to_upload',
-    };
+  if (String(stepKey || '').trim().toLowerCase().startsWith('kiro-')) {
+    const kiroResets = typeof kiroStateHelpers?.buildDownstreamResetPatch === 'function'
+      ? kiroStateHelpers.buildDownstreamResetPatch(stepKey, state)
+      : {};
+    if (Object.keys(kiroResets).length > 0) {
+      return {
+        ...(stepKey === 'kiro-open-register-page' ? { flowStartTime: null } : {}),
+        ...kiroResets,
+      };
+    }
   }
   const plusRuntimeResets = {
     plusCheckoutTabId: null,
@@ -10270,38 +10195,9 @@ async function handleNodeData(nodeId, payload) {
   const state = await getState();
   const nodeDefinition = getNodeDefinitionForState(nodeId, state);
   if (String(nodeDefinition?.flowId || '').trim().toLowerCase() === 'kiro') {
-    const kiroFieldKeys = [
-      'kiroAccessToken',
-      'kiroAuthError',
-      'kiroAuthExpiresAt',
-      'kiroAuthIntervalSeconds',
-      'kiroAuthRegion',
-      'kiroAuthStatus',
-      'kiroAuthTabId',
-      'kiroAuthorizedEmail',
-      'kiroClientId',
-      'kiroClientSecret',
-      'kiroCredentialId',
-      'kiroDeviceAuthorizationCode',
-      'kiroDeviceCode',
-      'kiroFullName',
-      'kiroLastConnectionMessage',
-      'kiroLastUploadAt',
-      'kiroLoginUrl',
-      'kiroRefreshToken',
-      'kiroUploadError',
-      'kiroUploadStatus',
-      'kiroUserCode',
-      'kiroVerificationRequestedAt',
-      'kiroVerificationUri',
-      'kiroVerificationUriComplete',
-    ];
-    const updates = {};
-    for (const field of kiroFieldKeys) {
-      if (Object.prototype.hasOwnProperty.call(payload || {}, field)) {
-        updates[field] = payload[field];
-      }
-    }
+    const updates = typeof kiroStateHelpers?.applyNodeCompletionPayload === 'function'
+      ? kiroStateHelpers.applyNodeCompletionPayload(state, payload || {})
+      : {};
     if (Object.keys(updates).length > 0) {
       await setState(updates);
       broadcastDataUpdate(updates);
@@ -10349,12 +10245,14 @@ const AUTO_RUN_BACKGROUND_COMPLETED_STEP_KEYS = new Set([
   'fetch-bound-email-login-code',
   'post-bound-email-phone-verification',
   'confirm-oauth',
-  'kiro-start-device-login',
+  'kiro-open-register-page',
   'kiro-submit-email',
   'kiro-submit-name',
   'kiro-submit-verification-code',
-  'kiro-fill-password',
-  'kiro-confirm-access',
+  'kiro-submit-password',
+  'kiro-complete-register-consent',
+  'kiro-start-desktop-authorize',
+  'kiro-complete-desktop-authorize',
   'kiro-upload-credential',
 ]);
 const STEP_COMPLETION_SIGNAL_STEP_KEYS = new Set([
@@ -12846,7 +12744,8 @@ async function resumeAutoRun() {
 
 const SIGNUP_ENTRY_URL = 'https://chatgpt.com/';
 const SIGNUP_PAGE_INJECT_FILES = ['content/utils.js', 'content/operation-delay.js', 'content/auth-page-recovery.js', 'content/phone-country-utils.js', 'content/phone-auth.js', 'content/signup-page.js'];
-const KIRO_DEVICE_AUTH_INJECT_FILES = ['shared/source-registry.js', 'content/utils.js', 'content/kiro-device-auth-page.js'];
+const KIRO_REGISTER_INJECT_FILES = ['shared/source-registry.js', 'content/utils.js', 'content/kiro/register-page.js'];
+const KIRO_DESKTOP_AUTHORIZE_INJECT_FILES = ['shared/source-registry.js', 'content/utils.js', 'content/kiro/desktop-authorize-page.js'];
 const panelBridge = self.MultiPageBackgroundPanelBridge?.createPanelBridge({
   chrome,
   addLog,
@@ -13238,7 +13137,7 @@ const plusReturnConfirmExecutor = self.MultiPageBackgroundPlusReturnConfirm?.cre
   sleepWithStop,
   waitForTabUrlMatchUntilStopped,
 });
-const kiroDeviceAuthExecutor = self.MultiPageBackgroundKiroDeviceAuth?.createKiroDeviceAuthExecutor({
+const kiroRegisterRunner = self.MultiPageBackgroundKiroRegisterRunner?.createKiroRegisterRunner({
   addLog,
   chrome,
   ensureContentScriptReadyOnTab,
@@ -13275,7 +13174,48 @@ const kiroDeviceAuthExecutor = self.MultiPageBackgroundKiroDeviceAuth?.createKir
   sleepWithStop,
   throwIfStopped,
   waitForTabStableComplete,
-  KIRO_DEVICE_AUTH_INJECT_FILES,
+  KIRO_REGISTER_INJECT_FILES,
+});
+const kiroDesktopAuthorizeRunner = self.MultiPageBackgroundKiroDesktopAuthorizeRunner?.createKiroDesktopAuthorizeRunner({
+  addLog,
+  chrome,
+  completeNodeFromBackground,
+  ensureContentScriptReadyOnTab,
+  ensureIcloudMailSession: ensureIcloudMailSessionForVerification,
+  ensureMail2925MailboxSession,
+  fetchImpl: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+  getMailConfig,
+  getTabId,
+  getState,
+  HOTMAIL_PROVIDER,
+  isTabAlive,
+  LUCKMAIL_PROVIDER,
+  CLOUDFLARE_TEMP_EMAIL_PROVIDER,
+  CLOUD_MAIL_PROVIDER,
+  YYDS_MAIL_PROVIDER,
+  MAIL_2925_VERIFICATION_INTERVAL_MS,
+  MAIL_2925_VERIFICATION_MAX_ATTEMPTS,
+  pollCloudflareTempEmailVerificationCode,
+  pollCloudMailVerificationCode,
+  pollHotmailVerificationCode,
+  pollLuckmailVerificationCode,
+  pollYydsMailVerificationCode,
+  registerTab,
+  reuseOrCreateTab,
+  sendToContentScriptResilient,
+  sendToMailContentScriptResilient,
+  setState,
+  sleepWithStop,
+  throwIfStopped,
+  waitForTabStableComplete,
+  KIRO_DESKTOP_AUTHORIZE_INJECT_FILES,
+});
+const kiroPublisher = self.MultiPageBackgroundKiroPublisherKiroRs?.createKiroRsPublisher({
+  addLog,
+  completeNodeFromBackground,
+  fetchImpl: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+  getState,
+  setState,
 });
 const step10Executor = self.MultiPageBackgroundStep10?.createStep10Executor({
   addLog,
@@ -13354,13 +13294,15 @@ const stepExecutorsByKey = {
   'post-bound-email-phone-verification': (state) => step8Executor.executeBoundEmailPostLoginPhoneVerification(state),
   'confirm-oauth': (state) => step9Executor.executeStep9(state),
   'platform-verify': (state) => executeStep10(state),
-  'kiro-start-device-login': (state) => kiroDeviceAuthExecutor.executeKiroStartDeviceLogin(state),
-  'kiro-submit-email': (state) => kiroDeviceAuthExecutor.executeKiroSubmitEmail(state),
-  'kiro-submit-name': (state) => kiroDeviceAuthExecutor.executeKiroSubmitName(state),
-  'kiro-submit-verification-code': (state) => kiroDeviceAuthExecutor.executeKiroSubmitVerificationCode(state),
-  'kiro-fill-password': (state) => kiroDeviceAuthExecutor.executeKiroFillPassword(state),
-  'kiro-confirm-access': (state) => kiroDeviceAuthExecutor.executeKiroConfirmAccess(state),
-  'kiro-upload-credential': (state) => kiroDeviceAuthExecutor.executeKiroUploadCredential(state),
+  'kiro-open-register-page': (state) => kiroRegisterRunner.executeKiroOpenRegisterPage(state),
+  'kiro-submit-email': (state) => kiroRegisterRunner.executeKiroSubmitEmail(state),
+  'kiro-submit-name': (state) => kiroRegisterRunner.executeKiroSubmitName(state),
+  'kiro-submit-verification-code': (state) => kiroRegisterRunner.executeKiroSubmitVerificationCode(state),
+  'kiro-submit-password': (state) => kiroRegisterRunner.executeKiroSubmitPassword(state),
+  'kiro-complete-register-consent': (state) => kiroRegisterRunner.executeKiroCompleteRegisterConsent(state),
+  'kiro-start-desktop-authorize': (state) => kiroDesktopAuthorizeRunner.executeKiroStartDesktopAuthorize(state),
+  'kiro-complete-desktop-authorize': (state) => kiroDesktopAuthorizeRunner.executeKiroCompleteDesktopAuthorize(state),
+  'kiro-upload-credential': (state) => kiroPublisher.executeKiroUploadCredential(state),
 };
 const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter({
   addLog,

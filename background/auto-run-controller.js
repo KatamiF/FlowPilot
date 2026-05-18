@@ -106,7 +106,7 @@
         activeFlowId: state.activeFlowId,
         flowId: state.flowId || state.activeFlowId,
         panelMode: state.panelMode,
-        kiroSourceId: state.kiroSourceId,
+        kiroTargetId: state.kiroTargetId,
         vpsUrl: state.vpsUrl,
         vpsPassword: state.vpsPassword,
         customPassword: state.customPassword,

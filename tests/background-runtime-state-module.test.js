@@ -147,7 +147,7 @@ test('runtime-state patch prefers explicit activeFlowId over stale legacy flowId
     DEFAULT_ACTIVE_FLOW_ID: 'openai',
     defaultNodeStatuses: {
       'open-chatgpt': 'pending',
-      'kiro-start-device-login': 'pending',
+      'kiro-open-register-page': 'pending',
     },
   });
 
@@ -160,7 +160,7 @@ test('runtime-state patch prefers explicit activeFlowId over stale legacy flowId
   }, {
     activeFlowId: 'kiro',
     nodeStatuses: {
-      'kiro-start-device-login': 'running',
+      'kiro-open-register-page': 'running',
     },
   });
 
@@ -168,6 +168,6 @@ test('runtime-state patch prefers explicit activeFlowId over stale legacy flowId
   assert.equal(patch.flowId, 'kiro');
   assert.deepStrictEqual(patch.nodeStatuses, {
     'open-chatgpt': 'pending',
-    'kiro-start-device-login': 'running',
+    'kiro-open-register-page': 'running',
   });
 });

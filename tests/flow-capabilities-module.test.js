@@ -73,7 +73,7 @@ test('flow capability registry defaults unknown flows to minimal non-phone capab
   assert.equal(capabilityState.canUsePhoneSignup, false);
   assert.equal(capabilityState.effectiveSignupMethod, 'email');
   assert.equal(capabilityState.panelMode, 'codex2api');
-  assert.deepEqual(capabilityState.supportedIntegrationTargets, []);
+  assert.deepEqual(capabilityState.supportedTargetIds, []);
 });
 
 test('flow capability registry exposes Kiro as an independent flow with its own visible groups', () => {
@@ -83,7 +83,7 @@ test('flow capability registry exposes Kiro as an independent flow with its own 
   const capabilityState = registry.resolveSidepanelCapabilities({
     state: {
       activeFlowId: 'kiro',
-      kiroIntegrationTargetId: 'kiro-rs',
+      kiroTargetId: 'kiro-rs',
       openaiIntegrationTargetId: 'sub2api',
       signupMethod: 'phone',
       plusModeEnabled: true,
@@ -95,7 +95,7 @@ test('flow capability registry exposes Kiro as an independent flow with its own 
   assert.equal(capabilityState.canShowPhoneSettings, false);
   assert.equal(capabilityState.canShowPlusSettings, false);
   assert.equal(capabilityState.effectiveSignupMethod, 'email');
-  assert.equal(capabilityState.effectiveIntegrationTargetId, 'kiro-rs');
+  assert.equal(capabilityState.effectiveTargetId, 'kiro-rs');
   assert.deepEqual(
     capabilityState.visibleGroupIds,
     ['kiro-runtime-status', 'kiro-target-kiro-rs', 'service-account', 'service-email', 'service-proxy']
@@ -109,7 +109,7 @@ test('flow capability registry exposes shared auto-run validation for phone lock
       openai: api.FLOW_CAPABILITIES.openai,
       'site-a': {
         ...api.DEFAULT_FLOW_CAPABILITIES,
-        supportedIntegrationTargets: ['cpa'],
+        supportedTargetIds: ['cpa'],
       },
     },
   });
@@ -147,7 +147,7 @@ test('flow capability registry normalizes unsupported mode switches back to the 
       openai: api.FLOW_CAPABILITIES.openai,
       'site-a': {
         ...api.DEFAULT_FLOW_CAPABILITIES,
-        supportedIntegrationTargets: ['cpa'],
+        supportedTargetIds: ['cpa'],
       },
     },
   });
@@ -174,8 +174,7 @@ test('flow capability registry normalizes unsupported mode switches back to the 
   assert.deepEqual(validation.normalizedUpdates, {
     panelMode: 'cpa',
     openaiIntegrationTargetId: 'cpa',
-    kiroIntegrationTargetId: 'cpa',
-    kiroSourceId: 'cpa',
+    kiroTargetId: 'cpa',
     signupMethod: 'email',
     phoneVerificationEnabled: false,
     plusModeEnabled: false,

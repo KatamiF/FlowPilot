@@ -120,39 +120,8 @@
         'step8VerificationTargetEmail',
       ]),
     });
-    const KIRO_FLOW_FIELD_GROUPS = Object.freeze({
-      auth: Object.freeze([
-        'kiroDeviceCode',
-        'kiroUserCode',
-        'kiroDeviceAuthorizationCode',
-        'kiroLoginUrl',
-        'kiroVerificationUri',
-        'kiroVerificationUriComplete',
-        'kiroClientId',
-        'kiroClientSecret',
-        'kiroAuthRegion',
-        'kiroAuthExpiresAt',
-        'kiroAuthIntervalSeconds',
-        'kiroAuthTabId',
-        'kiroAuthStatus',
-        'kiroAuthError',
-        'kiroAccessToken',
-        'kiroRefreshToken',
-      ]),
-      upload: Object.freeze([
-        'kiroUploadStatus',
-        'kiroUploadError',
-        'kiroCredentialId',
-        'kiroLastUploadAt',
-        'kiroLastConnectionMessage',
-      ]),
-      identity: Object.freeze([
-        'kiroAuthorizedEmail',
-      ]),
-    });
     const FLOW_FIELD_GROUPS = Object.freeze({
       openai: OPENAI_FLOW_FIELD_GROUPS,
-      kiro: KIRO_FLOW_FIELD_GROUPS,
     });
 
     function isPlainObject(value) {
@@ -266,7 +235,6 @@
       return {
         ...baseFlowState,
         openai: buildScopedFlowState(baseFlowState, state, 'openai'),
-        kiro: buildScopedFlowState(baseFlowState, state, 'kiro'),
       };
     }
 
@@ -411,11 +379,6 @@
             luckmail: {},
             identity: {},
           },
-          kiro: {
-            auth: {},
-            upload: {},
-            identity: {},
-          },
         },
       };
     }
@@ -530,7 +493,6 @@
     return {
       DEFAULT_ACTIVE_FLOW_ID,
       FLOW_FIELD_GROUPS,
-      KIRO_FLOW_FIELD_GROUPS,
       OPENAI_FLOW_FIELD_GROUPS,
       RUNTIME_PROXY_FIELDS,
       RUNTIME_SHARED_FIELDS,

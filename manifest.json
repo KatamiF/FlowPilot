@@ -116,25 +116,6 @@
         "content/duck-mail.js"
       ],
       "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://view.awsapps.com/*",
-        "https://login.awsapps.com/*",
-        "https://*.awsapps.com/*",
-        "https://signin.aws/*",
-        "https://signin.aws.amazon.com/*",
-        "https://*.signin.aws/*",
-        "https://profile.aws/*",
-        "https://profile.aws.amazon.com/*",
-        "https://*.profile.aws/*"
-      ],
-      "js": [
-        "shared/source-registry.js",
-        "content/utils.js",
-        "content/kiro-device-auth-page.js"
-      ],
-      "run_at": "document_idle"
     }
   ],
   "action": {

@@ -145,13 +145,13 @@ const self = {
       }
       return String(fallback || 'openai').trim().toLowerCase() === 'kiro' ? 'kiro' : 'openai';
     },
-    normalizeSourceId(flowId, sourceId, fallback = 'kiro-rs') {
+    normalizeTargetId(flowId, targetId, fallback = 'kiro-rs') {
       const normalizedFlowId = this.normalizeFlowId(flowId);
       if (normalizedFlowId !== 'kiro') {
         return 'cpa';
       }
-      const normalizedSourceId = String(sourceId || '').trim().toLowerCase();
-      return normalizedSourceId === 'kiro-rs' ? normalizedSourceId : fallback;
+      const normalizedTargetId = String(targetId || '').trim().toLowerCase();
+      return normalizedTargetId === 'kiro-rs' ? normalizedTargetId : fallback;
     },
   },
   GoPayUtils: {
@@ -276,7 +276,7 @@ return {
   assert.equal(api.normalizePersistentSettingValue('signupMethod', 'unknown'), 'email');
   assert.equal(api.normalizePersistentSettingValue('activeFlowId', 'codex'), 'openai');
   assert.equal(api.normalizePersistentSettingValue('activeFlowId', 'kiro'), 'kiro');
-  assert.equal(api.normalizePersistentSettingValue('kiroSourceId', 'unknown'), 'kiro-rs');
+  assert.equal(api.normalizePersistentSettingValue('kiroTargetId', 'unknown'), 'kiro-rs');
   assert.equal(api.normalizePersistentSettingValue('kiroRsUrl', ''), 'https://kiro.leftcode.xyz/admin');
   assert.equal(api.normalizePersistentSettingValue('kiroRsKey', ' key-1 '), ' key-1 ');
   assert.equal(api.normalizePersistentSettingValue('phoneSmsProvider', '5SIM'), '5sim');

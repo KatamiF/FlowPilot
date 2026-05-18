@@ -184,14 +184,14 @@ function normalizePanelMode(value = '', fallback = 'cpa') {
 function getSelectedFlowId() {
   return latestState.activeFlowId;
 }
-function getSelectedSourceId() {
+function getSelectedTargetId() {
   return 'cpa';
 }
 function renderFlowSelectorOptions(flowId) {
   calls.push({ type: 'render-flow', flowId });
 }
-function renderSourceSelectorOptions(flowId, sourceId) {
-  calls.push({ type: 'render-source', flowId, sourceId });
+function renderTargetSelectorOptions(flowId, targetId) {
+  calls.push({ type: 'render-target', flowId, targetId });
 }
 function applyFlowSettingsGroupVisibility(visibleGroupIds) {
   calls.push({ type: 'groups', visibleGroupIds: [...visibleGroupIds] });
@@ -207,7 +207,7 @@ function resolveCurrentSidepanelCapabilities() {
     visibleGroupIds: ['service-account', 'openai-plus', 'openai-phone'],
     effectivePanelMode: 'cpa',
     panelMode: 'cpa',
-    effectiveSourceId: 'cpa',
+    effectiveTargetId: 'cpa',
   };
 }
 const document = {
@@ -228,7 +228,7 @@ return {
 
   assert.deepEqual(
     api.calls.map((entry) => entry.type),
-    ['render-flow', 'render-source', 'groups', 'plus', 'phone']
+    ['render-flow', 'render-target', 'groups', 'plus', 'phone']
   );
   assert.equal(api.selectFlow.value, 'openai');
   assert.equal(api.selectPanelMode.value, 'cpa');

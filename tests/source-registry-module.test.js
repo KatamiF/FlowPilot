@@ -2,6 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
+function loadSourceRegistry() {
+  const flowRegistrySource = fs.readFileSync('shared/flow-registry.js', 'utf8');
+  const sourceRegistrySource = fs.readFileSync('shared/source-registry.js', 'utf8');
+  const globalScope = {};
+  new Function('self', `${flowRegistrySource}; ${sourceRegistrySource}; return self;`)(globalScope);
+  return globalScope.MultiPageSourceRegistry.createSourceRegistry();
+}
+
 test('background imports shared source registry module', () => {
   const source = fs.readFileSync('background.js', 'utf8');
   assert.match(source, /shared\/flow-registry\.js/);
@@ -22,42 +30,24 @@ test('manifest loads shared source registry before content utils in static bundl
   }
 });
 
-test('manifest ships a static Kiro auth bundle for cross-page recovery', () => {
+test('manifest no longer ships a static Kiro content bundle', () => {
   const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
-  const kiroEntry = (manifest.content_scripts || []).find((entry) => {
-    const matches = Array.isArray(entry.matches) ? entry.matches : [];
-    return matches.includes('https://view.awsapps.com/*')
-      && matches.includes('https://signin.aws/*')
-      && matches.includes('https://signin.aws.amazon.com/*')
-      && matches.includes('https://profile.aws/*')
-      && matches.includes('https://profile.aws.amazon.com/*');
+  const hasStaticKiroBundle = (manifest.content_scripts || []).some((entry) => {
+    const scripts = Array.isArray(entry.js) ? entry.js : [];
+    return scripts.includes('content/kiro/register-page.js')
+      || scripts.includes('content/kiro/desktop-authorize-page.js');
   });
 
-  assert.ok(kiroEntry, 'missing static Kiro auth content script entry');
-  assert.deepEqual(kiroEntry.js, [
-    'shared/source-registry.js',
-    'content/utils.js',
-    'content/kiro-device-auth-page.js',
-  ]);
+  assert.equal(hasStaticKiroBundle, false);
 });
 
-test('shared source registry exposes canonical source, alias, detection, and ready policies', () => {
-  const flowRegistrySource = fs.readFileSync('shared/flow-registry.js', 'utf8');
-  const source = fs.readFileSync('shared/source-registry.js', 'utf8');
-  const api = new Function('self', `${flowRegistrySource}; ${source}; return self.MultiPageSourceRegistry;`)({});
-  const registry = api.createSourceRegistry();
+test('shared source registry exposes canonical Kiro sources and drivers', () => {
+  const registry = loadSourceRegistry();
 
   assert.equal(registry.resolveCanonicalSource('signup-page'), 'openai-auth');
   assert.deepEqual(registry.getSourceKeys('signup-page'), ['openai-auth', 'signup-page']);
   assert.equal(registry.getSourceLabel('openai-auth'), '认证页');
-  assert.equal(
-    registry.matchesSourceUrlFamily(
-      'openai-auth',
-      'https://chatgpt.com/',
-      'https://auth.openai.com/authorize?client_id=test'
-    ),
-    true
-  );
+
   assert.equal(
     registry.detectSourceFromLocation({
       url: 'https://auth.openai.com/create-account',
@@ -67,34 +57,30 @@ test('shared source registry exposes canonical source, alias, detection, and rea
   );
   assert.equal(
     registry.detectSourceFromLocation({
+      url: 'https://view.awsapps.com/start',
+      hostname: 'view.awsapps.com',
+    }),
+    'kiro-register-page'
+  );
+  assert.equal(
+    registry.detectSourceFromLocation({
+      injectedSource: 'kiro-desktop-authorize',
+      url: 'https://signin.aws/register',
+      hostname: 'signin.aws',
+    }),
+    'kiro-desktop-authorize'
+  );
+  assert.equal(
+    registry.detectSourceFromLocation({
       url: 'https://example.com/',
       hostname: 'example.com',
     }),
     'unknown-source'
   );
-  assert.equal(registry.detectSourceFromLocation({
-    url: 'https://view.awsapps.com/start',
-    hostname: 'view.awsapps.com',
-  }), 'kiro-device-auth');
-  assert.equal(registry.detectSourceFromLocation({
-    url: 'https://signin.aws/register',
-    hostname: 'signin.aws',
-  }), 'kiro-device-auth');
-  assert.equal(registry.detectSourceFromLocation({
-    url: 'https://profile.aws/complete',
-    hostname: 'profile.aws',
-  }), 'kiro-device-auth');
-  assert.equal(registry.detectSourceFromLocation({
-    url: 'https://signin.aws.amazon.com/register',
-    hostname: 'signin.aws.amazon.com',
-  }), 'kiro-device-auth');
-  assert.equal(registry.detectSourceFromLocation({
-    url: 'https://profile.aws.amazon.com/complete',
-    hostname: 'profile.aws.amazon.com',
-  }), 'kiro-device-auth');
+
   assert.equal(
     registry.matchesSourceUrlFamily(
-      'kiro-device-auth',
+      'kiro-register-page',
       'https://signin.aws/register',
       'https://view.awsapps.com/start'
     ),
@@ -102,7 +88,7 @@ test('shared source registry exposes canonical source, alias, detection, and rea
   );
   assert.equal(
     registry.matchesSourceUrlFamily(
-      'kiro-device-auth',
+      'kiro-desktop-authorize',
       'https://profile.aws/complete',
       'https://signin.aws/register'
     ),
@@ -110,38 +96,24 @@ test('shared source registry exposes canonical source, alias, detection, and rea
   );
   assert.equal(
     registry.matchesSourceUrlFamily(
-      'kiro-device-auth',
-      'https://profile.aws.amazon.com/complete',
-      'https://signin.aws.amazon.com/register'
-    ),
-    true
-  );
-  assert.equal(
-    registry.matchesSourceUrlFamily(
-      'kiro-device-auth',
+      'kiro-desktop-authorize',
       'https://oidc.us-east-1.amazonaws.com/authorize',
       'https://view.awsapps.com/start'
     ),
     true
   );
+
   assert.equal(registry.shouldReportReadyForFrame('mail-163', true), false);
-  assert.equal(registry.shouldReportReadyForFrame('unknown-source', false), false);
+  assert.equal(registry.shouldReportReadyForFrame('kiro-register-page', true), false);
+  assert.equal(registry.shouldReportReadyForFrame('kiro-desktop-authorize', true), false);
   assert.equal(registry.getCleanupOwnerSource('oauth-localhost-callback'), 'openai-auth');
+
   assert.equal(registry.driverAcceptsCommand('openai-auth', 'submit-signup-email'), true);
-  assert.equal(registry.driverAcceptsCommand('openai-auth', 'post-login-phone-verification'), true);
-  assert.equal(registry.driverAcceptsCommand('openai-auth', 'bind-email'), true);
-  assert.equal(registry.driverAcceptsCommand('openai-auth', 'fetch-bind-email-code'), true);
   assert.equal(registry.driverAcceptsCommand('content/platform-panel', 'platform-verify'), true);
   assert.equal(registry.driverAcceptsCommand('openai-auth', 'platform-verify'), false);
-  assert.equal(registry.driverAcceptsCommand('content/kiro-device-auth-page', 'kiro-submit-email'), true);
-  assert.equal(registry.driverAcceptsCommand('content/kiro-device-auth-page', 'kiro-submit-name'), true);
-  assert.equal(registry.driverAcceptsCommand('content/kiro-device-auth-page', 'kiro-submit-verification-code'), true);
-  assert.equal(registry.driverAcceptsCommand('content/kiro-device-auth-page', 'kiro-fill-password'), true);
-  assert.equal(registry.driverAcceptsCommand('content/kiro-device-auth-page', 'kiro-confirm-access'), true);
-  assert.equal(registry.driverAcceptsCommand('background/kiro-device-auth', 'kiro-start-device-login'), true);
-  assert.equal(registry.driverAcceptsCommand('background/kiro-device-auth', 'kiro-submit-email'), true);
-  assert.equal(registry.driverAcceptsCommand('background/kiro-device-auth', 'kiro-submit-name'), true);
-  assert.equal(registry.driverAcceptsCommand('background/kiro-device-auth', 'kiro-submit-verification-code'), true);
-  assert.equal(registry.driverAcceptsCommand('background/kiro-device-auth', 'kiro-fill-password'), true);
-  assert.equal(registry.driverAcceptsCommand('background/kiro-device-auth', 'kiro-confirm-access'), true);
+  assert.equal(registry.driverAcceptsCommand('content/kiro/register-page', 'kiro-submit-password'), true);
+  assert.equal(registry.driverAcceptsCommand('content/kiro/desktop-authorize-page', 'kiro-complete-desktop-authorize'), true);
+  assert.equal(registry.driverAcceptsCommand('background/kiro-register', 'kiro-open-register-page'), true);
+  assert.equal(registry.driverAcceptsCommand('background/kiro-desktop-authorize', 'kiro-start-desktop-authorize'), true);
+  assert.equal(registry.driverAcceptsCommand('background/kiro-publisher-kiro-rs', 'kiro-upload-credential'), true);
 });

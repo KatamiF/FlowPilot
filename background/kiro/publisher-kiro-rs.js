@@ -1,0 +1,402 @@
+(function attachBackgroundKiroPublisherKiroRs(root, factory) {
+  root.MultiPageBackgroundKiroPublisherKiroRs = factory(root);
+})(typeof self !== 'undefined' ? self : globalThis, function createBackgroundKiroPublisherKiroRsModule(root) {
+  const kiroStateApi = root?.MultiPageBackgroundKiroState || null;
+  const DEFAULT_REGION = kiroStateApi?.DEFAULT_REGION || 'us-east-1';
+  const DEFAULT_TARGET_ID = kiroStateApi?.DEFAULT_TARGET_ID || 'kiro-rs';
+
+  function isPlainObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function cloneValue(value) {
+    if (Array.isArray(value)) {
+      return value.map((entry) => cloneValue(entry));
+    }
+    if (isPlainObject(value)) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, entryValue]) => [key, cloneValue(entryValue)])
+      );
+    }
+    return value;
+  }
+
+  function deepMerge(baseValue, patchValue) {
+    if (Array.isArray(patchValue)) {
+      return patchValue.map((entry) => cloneValue(entry));
+    }
+    if (!isPlainObject(patchValue)) {
+      return patchValue === undefined ? cloneValue(baseValue) : patchValue;
+    }
+
+    const baseObject = isPlainObject(baseValue) ? baseValue : {};
+    const next = {
+      ...cloneValue(baseObject),
+    };
+    Object.entries(patchValue).forEach(([key, value]) => {
+      next[key] = deepMerge(baseObject[key], value);
+    });
+    return next;
+  }
+
+  function cleanString(value = '') {
+    return String(value ?? '').trim();
+  }
+
+  function normalizeRegion(value = '', fallback = DEFAULT_REGION) {
+    return cleanString(value) || fallback;
+  }
+
+  function normalizeKiroRsBaseUrl(value = '') {
+    const normalized = cleanString(value).replace(/\/+$/, '');
+    if (!normalized) {
+      throw new Error('缺少 kiro.rs 管理后台地址。');
+    }
+    return normalized.endsWith('/admin')
+      ? normalized.slice(0, -'/admin'.length)
+      : normalized;
+  }
+
+  function normalizeKiroUploadMessage(value = '') {
+    const rawValue = cleanString(value);
+    if (!rawValue) {
+      return '上传成功';
+    }
+
+    const normalizedValue = rawValue.toLowerCase();
+    if (normalizedValue === 'uploaded' || normalizedValue === 'credential uploaded.') {
+      return '上传成功';
+    }
+    return rawValue;
+  }
+
+  function getErrorMessage(error) {
+    return error instanceof Error ? error.message : String(error ?? '未知错误');
+  }
+
+  async function readResponse(response) {
+    const text = await response.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch (_error) {
+      json = null;
+    }
+    return { text, json };
+  }
+
+  function readKiroRuntime(state = {}) {
+    return kiroStateApi?.ensureRuntimeState
+      ? kiroStateApi.ensureRuntimeState(state)
+      : (isPlainObject(state?.kiroRuntime) ? state.kiroRuntime : {});
+  }
+
+  function mergeRuntimePatch(currentState = {}, patch = {}) {
+    return {
+      kiroRuntime: deepMerge(readKiroRuntime(currentState), patch),
+    };
+  }
+
+  function resolveKiroTargetId(state = {}) {
+    return cleanString(
+      state?.settingsState?.flows?.kiro?.targetId
+      || state?.flows?.kiro?.targetId
+      || state?.kiroTargetId
+      || readKiroRuntime(state).upload?.targetId
+      || DEFAULT_TARGET_ID
+    ) || DEFAULT_TARGET_ID;
+  }
+
+  function resolveKiroTargetConfig(state = {}, targetId = DEFAULT_TARGET_ID) {
+    if (targetId !== DEFAULT_TARGET_ID) {
+      throw new Error(`暂不支持 Kiro 发布目标：${targetId}`);
+    }
+    const nestedConfig = state?.settingsState?.flows?.kiro?.targets?.[targetId]
+      || state?.flows?.kiro?.targets?.[targetId]
+      || {};
+    return {
+      baseUrl: cleanString(nestedConfig.baseUrl || state?.kiroRsUrl),
+      apiKey: String(nestedConfig.apiKey ?? state?.kiroRsKey ?? ''),
+    };
+  }
+
+  function buildProxyPayload(state = {}) {
+    if (!state?.ipProxyEnabled) {
+      return {};
+    }
+
+    const apiProxyUrl = cleanString(state?.ipProxyApiUrl);
+    const host = cleanString(state?.ipProxyHost);
+    const port = cleanString(state?.ipProxyPort);
+    const protocol = cleanString(state?.ipProxyProtocol) || 'http';
+    const proxyUrl = apiProxyUrl || (host && port ? `${protocol}://${host}:${port}` : '');
+    const proxyUsername = cleanString(state?.ipProxyUsername);
+    const proxyPassword = String(state?.ipProxyPassword || '');
+
+    return {
+      ...(proxyUrl ? { proxyUrl } : {}),
+      ...(proxyUsername ? { proxyUsername } : {}),
+      ...(proxyPassword ? { proxyPassword } : {}),
+    };
+  }
+
+  async function sha256Hex(input = '') {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(String(input ?? ''));
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest))
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  async function buildMachineId(refreshToken = '') {
+    const normalizedRefreshToken = cleanString(refreshToken);
+    if (!normalizedRefreshToken) {
+      throw new Error('缺少 refreshToken，无法生成 machineId。');
+    }
+    return sha256Hex(`KotlinNativeAPI/${normalizedRefreshToken}`);
+  }
+
+  function buildUploadPayload(state = {}) {
+    const runtimeState = readKiroRuntime(state);
+    const targetId = resolveKiroTargetId(state);
+    const desktopAuth = runtimeState.desktopAuth || {};
+    const register = runtimeState.register || {};
+    const refreshToken = String(desktopAuth.refreshToken || '');
+    const clientId = cleanString(desktopAuth.clientId);
+    const clientSecret = String(desktopAuth.clientSecret || '');
+    const region = normalizeRegion(
+      desktopAuth.region
+      || state?.settingsState?.flows?.kiro?.targets?.[targetId]?.region
+      || state?.flows?.kiro?.targets?.[targetId]?.region
+      || DEFAULT_REGION
+    );
+    const email = cleanString(register.email || state?.email);
+
+    if (!refreshToken) {
+      throw new Error('缺少桌面授权 refreshToken，请先完成步骤 8。');
+    }
+    if (!clientId || !clientSecret) {
+      throw new Error('缺少桌面授权 clientId 或 clientSecret，请先完成步骤 7-8。');
+    }
+    if (!email) {
+      throw new Error('缺少注册邮箱，无法上传到 kiro.rs。');
+    }
+
+    return {
+      targetId,
+      region,
+      email,
+      refreshToken,
+      clientId,
+      clientSecret,
+      authMethod: 'idc',
+      authRegion: region,
+      apiRegion: region,
+      ...buildProxyPayload(state),
+    };
+  }
+
+  async function checkKiroRsConnection(baseUrl, apiKey, fetchImpl) {
+    const normalizedBaseUrl = normalizeKiroRsBaseUrl(baseUrl);
+    const response = await fetchImpl(`${normalizedBaseUrl}/api/admin/credentials`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'x-api-key': String(apiKey || ''),
+      },
+    });
+    const body = await readResponse(response);
+    if (response.ok) {
+      return {
+        ok: true,
+        message: `kiro.rs 连接正常（HTTP ${response.status}）`,
+      };
+    }
+    if (response.status === 405) {
+      return {
+        ok: true,
+        message: 'kiro.rs 上传接口可访问。',
+      };
+    }
+    if (response.status === 401 || response.status === 403) {
+      return {
+        ok: false,
+        message: `kiro.rs API Key 被拒绝（HTTP ${response.status}）`,
+      };
+    }
+    if (response.status === 404) {
+      return {
+        ok: false,
+        message: '未找到 kiro.rs 管理接口。',
+      };
+    }
+    return {
+      ok: false,
+      message: cleanString(body.json?.error?.message || body.json?.message || body.text || response.statusText)
+        || `kiro.rs 连接失败（HTTP ${response.status}）`,
+    };
+  }
+
+  async function uploadBuilderIdCredential(baseUrl, apiKey, payload, fetchImpl) {
+    const normalizedBaseUrl = normalizeKiroRsBaseUrl(baseUrl);
+    const response = await fetchImpl(`${normalizedBaseUrl}/api/admin/credentials`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-api-key': String(apiKey || ''),
+      },
+      body: JSON.stringify(payload),
+    });
+    const body = await readResponse(response);
+    if (!response.ok) {
+      const message = cleanString(body.json?.error?.message || body.json?.message || body.text || response.statusText)
+        || `HTTP ${response.status}`;
+      throw new Error(`kiro.rs 凭据上传失败：${message}`);
+    }
+
+    return {
+      credentialId: Number(body.json?.credentialId || body.json?.credential_id || 0) || null,
+      email: cleanString(body.json?.email),
+      message: normalizeKiroUploadMessage(body.json?.message),
+      raw: body.json,
+    };
+  }
+
+  function createKiroRsPublisher(deps = {}) {
+    const {
+      addLog = async () => {},
+      completeNodeFromBackground,
+      fetchImpl = typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+      getState = async () => ({}),
+      setState = async () => {},
+    } = deps;
+
+    if (typeof completeNodeFromBackground !== 'function') {
+      throw new Error('Kiro kiro.rs publisher requires completeNodeFromBackground.');
+    }
+    if (typeof fetchImpl !== 'function') {
+      throw new Error('Kiro kiro.rs publisher requires fetch support.');
+    }
+
+    async function log(message, level = 'info', nodeId = '') {
+      await addLog(message, level, nodeId ? { nodeId } : {});
+    }
+
+    async function getExecutionState(state = {}) {
+      if (state && typeof state === 'object' && !Array.isArray(state) && Object.keys(state).length) {
+        return state;
+      }
+      return getState();
+    }
+
+    async function applyRuntimeState(currentState = {}, patch = {}) {
+      const nextPatch = mergeRuntimePatch(currentState, patch);
+      await setState(nextPatch);
+      return nextPatch;
+    }
+
+    async function persistFailure(currentState = {}, message = '') {
+      const nextPatch = mergeRuntimePatch(currentState, {
+        session: {
+          currentStage: 'upload',
+          lastError: message,
+        },
+        upload: {
+          status: 'error',
+          error: message,
+        },
+      });
+      await setState(nextPatch);
+    }
+
+    async function executeKiroUploadCredential(state = {}) {
+      const nodeId = String(state?.nodeId || 'kiro-upload-credential').trim();
+      const currentState = await getExecutionState(state);
+      try {
+        const targetId = resolveKiroTargetId(currentState);
+        const targetConfig = resolveKiroTargetConfig(currentState, targetId);
+        const baseUrl = normalizeKiroRsBaseUrl(targetConfig.baseUrl);
+        const apiKey = String(targetConfig.apiKey || '');
+        if (!apiKey) {
+          throw new Error('缺少 kiro.rs API Key。');
+        }
+
+        const uploadInput = buildUploadPayload(currentState);
+        const machineId = await buildMachineId(uploadInput.refreshToken);
+
+        await applyRuntimeState(currentState, {
+          session: {
+            currentStage: 'upload',
+            lastError: '',
+            lastWarning: '',
+          },
+          upload: {
+            targetId,
+            status: 'uploading',
+            error: '',
+          },
+        });
+
+        await log('步骤 9：正在上传 Builder ID 凭据到 kiro.rs...', 'info', nodeId);
+
+        const connection = await checkKiroRsConnection(baseUrl, apiKey, fetchImpl);
+        if (!connection.ok) {
+          throw new Error(connection.message);
+        }
+
+        const uploadResult = await uploadBuilderIdCredential(baseUrl, apiKey, {
+          refreshToken: uploadInput.refreshToken,
+          authMethod: uploadInput.authMethod,
+          clientId: uploadInput.clientId,
+          clientSecret: uploadInput.clientSecret,
+          region: uploadInput.region,
+          authRegion: uploadInput.authRegion,
+          apiRegion: uploadInput.apiRegion,
+          machineId,
+          email: uploadInput.email,
+          ...(uploadInput.proxyUrl ? { proxyUrl: uploadInput.proxyUrl } : {}),
+          ...(uploadInput.proxyUsername ? { proxyUsername: uploadInput.proxyUsername } : {}),
+          ...(uploadInput.proxyPassword ? { proxyPassword: uploadInput.proxyPassword } : {}),
+        }, fetchImpl);
+
+        const uploadedAt = Date.now();
+        const payload = await applyRuntimeState(currentState, {
+          session: {
+            currentStage: 'upload',
+            lastError: '',
+          },
+          upload: {
+            targetId,
+            status: 'uploaded',
+            error: '',
+            credentialId: uploadResult.credentialId,
+            lastMessage: uploadResult.message || '上传成功',
+            lastUploadedAt: uploadedAt,
+          },
+        });
+        await log(`步骤 9：kiro.rs 上传完成，状态：${uploadResult.message || '上传成功'}`, 'ok', nodeId);
+        await completeNodeFromBackground(nodeId, payload);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        await persistFailure(currentState, message);
+        throw error;
+      }
+    }
+
+    return {
+      executeKiroUploadCredential,
+    };
+  }
+
+  return {
+    buildKiroRsPayload: buildUploadPayload,
+    buildMachineId,
+    checkKiroRsConnection,
+    createKiroRsPublisher,
+    normalizeKiroRsBaseUrl,
+    normalizeKiroUploadMessage,
+    uploadBuilderIdCredential,
+  };
+});

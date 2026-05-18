@@ -361,7 +361,7 @@ test('AUTO_RUN applies current flow selection from payload before starting loop'
       validations.push({
         activeFlowId: validationState?.activeFlowId,
         flowId: validationState?.flowId,
-        kiroSourceId: validationState?.kiroSourceId,
+        kiroTargetId: validationState?.kiroTargetId,
         optionActiveFlowId: options?.activeFlowId,
       });
       return { ok: true, errors: [] };
@@ -373,21 +373,21 @@ test('AUTO_RUN applies current flow selection from payload before starting loop'
     payload: {
       totalRuns: 1,
       activeFlowId: 'kiro',
-      sourceId: 'kiro-rs',
+      targetId: 'kiro-rs',
     },
   });
 
   assert.equal(response.ok, true);
   assert.equal(state.activeFlowId, 'kiro');
   assert.equal(state.flowId, 'kiro');
-  assert.equal(state.kiroSourceId, 'kiro-rs');
+  assert.equal(state.kiroTargetId, 'kiro-rs');
   assert.deepStrictEqual(calls, [
     {
       type: 'setState',
       updates: {
         activeFlowId: 'kiro',
         flowId: 'kiro',
-        kiroSourceId: 'kiro-rs',
+        kiroTargetId: 'kiro-rs',
       },
     },
     {
@@ -409,7 +409,7 @@ test('AUTO_RUN applies current flow selection from payload before starting loop'
     {
       activeFlowId: 'kiro',
       flowId: 'kiro',
-      kiroSourceId: 'kiro-rs',
+      kiroTargetId: 'kiro-rs',
       optionActiveFlowId: 'kiro',
     },
   ]);

@@ -68,7 +68,7 @@ const latestState = {
   activeFlowId: 'openai',
   flowId: 'openai',
   panelMode: 'cpa',
-  kiroSourceId: 'kiro-rs',
+  kiroTargetId: 'kiro-rs',
 };
 const inputAutoSkipFailures = { checked: false };
 const inputContributionNickname = { value: 'tester' };
@@ -118,10 +118,10 @@ function normalizePanelMode(value = '', fallback = 'cpa') {
 function getSelectedFlowId(state = latestState) {
   return String(selectFlow.value || state.activeFlowId || state.flowId || DEFAULT_ACTIVE_FLOW_ID).trim().toLowerCase() || DEFAULT_ACTIVE_FLOW_ID;
 }
-function getSelectedSourceId(flowId = getSelectedFlowId()) {
+function getSelectedTargetId(flowId = getSelectedFlowId()) {
   return String(
     flowId === 'kiro'
-      ? (selectPanelMode.value || latestState.kiroSourceId || 'kiro-rs')
+      ? (selectPanelMode.value || latestState.kiroTargetId || 'kiro-rs')
       : normalizePanelMode(selectPanelMode.value || latestState.panelMode || 'cpa')
   ).trim().toLowerCase() || (flowId === 'kiro' ? 'kiro-rs' : 'cpa');
 }
@@ -225,7 +225,7 @@ test('startAutoRunFromCurrentSettings sends current flow selection with auto run
       selectPanelMode.value = 'kiro-rs';
       latestState.activeFlowId = 'openai';
       latestState.flowId = 'openai';
-      latestState.kiroSourceId = 'kiro-rs';
+      latestState.kiroTargetId = 'kiro-rs';
       events.push({ type: 'flow-switch-race' });
     }`,
   });
@@ -235,7 +235,7 @@ test('startAutoRunFromCurrentSettings sends current flow selection with auto run
 
   assert.equal(result, true);
   assert.equal(sendEvent.message.payload.activeFlowId, 'kiro');
-  assert.equal(sendEvent.message.payload.sourceId, 'kiro-rs');
+  assert.equal(sendEvent.message.payload.targetId, 'kiro-rs');
 });
 
 test('startAutoRunFromCurrentSettings blocks when shared flow capability validation fails', async () => {

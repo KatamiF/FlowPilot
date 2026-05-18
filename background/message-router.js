@@ -204,29 +204,25 @@
       return normalized;
     }
 
-    function normalizeMessageSourceId(flowId, sourceId = '', fallback = '') {
+    function normalizeMessageTargetId(flowId, targetId = '', fallback = '') {
       const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (typeof rootScope.MultiPageFlowRegistry?.normalizeSourceId === 'function') {
-        return rootScope.MultiPageFlowRegistry.normalizeSourceId(flowId, sourceId, fallback);
+      if (typeof rootScope.MultiPageFlowRegistry?.normalizeTargetId === 'function') {
+        return rootScope.MultiPageFlowRegistry.normalizeTargetId(flowId, targetId, fallback);
       }
       const fallbackSourceId = String(
         fallback || (normalizeMessageFlowId(flowId) === 'kiro' ? 'kiro-rs' : 'cpa')
       ).trim().toLowerCase();
-      return String(sourceId || fallbackSourceId).trim().toLowerCase() || fallbackSourceId;
+      return String(targetId || fallbackSourceId).trim().toLowerCase() || fallbackSourceId;
     }
 
-    function mapAutoRunSourceIdToPanelMode(sourceId = '', fallback = 'cpa') {
-      const rootScope = typeof self !== 'undefined' ? self : globalThis;
-      if (typeof rootScope.MultiPageFlowRegistry?.mapSourceIdToPanelMode === 'function') {
-        return rootScope.MultiPageFlowRegistry.mapSourceIdToPanelMode('openai', sourceId, fallback);
-      }
-      return String(sourceId || fallback || 'cpa').trim().toLowerCase() || 'cpa';
+    function mapAutoRunTargetIdToPanelMode(targetId = '', fallback = 'cpa') {
+      return String(targetId || fallback || 'cpa').trim().toLowerCase() || 'cpa';
     }
 
     function buildAutoRunFlowStateUpdates(payload = {}) {
       const hasActiveFlowId = Object.prototype.hasOwnProperty.call(payload, 'activeFlowId');
-      const hasSourceId = Object.prototype.hasOwnProperty.call(payload, 'sourceId');
-      if (!hasActiveFlowId && !hasSourceId) {
+      const hasTargetId = Object.prototype.hasOwnProperty.call(payload, 'targetId');
+      if (!hasActiveFlowId && !hasTargetId) {
         return {};
       }
       const activeFlowId = normalizeMessageFlowId(payload.activeFlowId, 'openai');
@@ -234,11 +230,11 @@
         activeFlowId,
         flowId: activeFlowId,
       };
-      if (hasSourceId) {
+      if (hasTargetId) {
         if (activeFlowId === 'kiro') {
-          updates.kiroSourceId = normalizeMessageSourceId('kiro', payload.sourceId, 'kiro-rs');
+          updates.kiroTargetId = normalizeMessageTargetId('kiro', payload.targetId, 'kiro-rs');
         } else {
-          updates.panelMode = mapAutoRunSourceIdToPanelMode(payload.sourceId, 'cpa');
+          updates.panelMode = mapAutoRunTargetIdToPanelMode(payload.targetId, 'cpa');
         }
       }
       return updates;

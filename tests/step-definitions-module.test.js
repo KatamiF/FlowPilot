@@ -167,35 +167,41 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
   assert.deepStrictEqual(
     kiroSteps.map((step) => step.key),
     [
-      'kiro-start-device-login',
+      'kiro-open-register-page',
       'kiro-submit-email',
       'kiro-submit-name',
       'kiro-submit-verification-code',
-      'kiro-fill-password',
-      'kiro-confirm-access',
+      'kiro-submit-password',
+      'kiro-complete-register-consent',
+      'kiro-start-desktop-authorize',
+      'kiro-complete-desktop-authorize',
       'kiro-upload-credential',
     ]
   );
   assert.equal(kiroSteps.every((step) => step.flowId === 'kiro'), true);
-  assert.equal(kiroSteps[0].driverId, 'background/kiro-device-auth');
-  assert.equal(kiroSteps[6].sourceId, 'kiro-rs-admin');
-  assert.equal(kiroSteps[0].title, '启动设备登录');
+  assert.equal(kiroSteps[0].driverId, 'background/kiro-register');
+  assert.equal(kiroSteps[8].sourceId, 'kiro-rs-admin');
+  assert.equal(kiroSteps[0].title, '打开注册页');
   assert.equal(kiroSteps[1].title, '获取邮箱并继续');
   assert.equal(kiroSteps[2].title, '填写姓名并继续');
   assert.equal(kiroSteps[3].title, '获取验证码并继续');
   assert.equal(kiroSteps[4].title, '设置密码并继续');
-  assert.equal(kiroSteps[5].title, '确认访问并授权');
-  assert.equal(kiroSteps[6].title, '上传凭据到 kiro.rs');
-  assert.deepStrictEqual(api.getStepIds({ activeFlowId: 'kiro' }), [1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(api.getLastStepId({ activeFlowId: 'kiro' }), 7);
+  assert.equal(kiroSteps[5].title, '完成注册授权');
+  assert.equal(kiroSteps[6].title, '启动桌面授权');
+  assert.equal(kiroSteps[7].title, '完成桌面授权');
+  assert.equal(kiroSteps[8].title, '上传凭据到 kiro.rs');
+  assert.deepStrictEqual(api.getStepIds({ activeFlowId: 'kiro' }), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.equal(api.getLastStepId({ activeFlowId: 'kiro' }), 9);
   assert.deepStrictEqual(
     api.getNodes({ activeFlowId: 'kiro' }).map((node) => node.next),
     [
       ['kiro-submit-email'],
       ['kiro-submit-name'],
       ['kiro-submit-verification-code'],
-      ['kiro-fill-password'],
-      ['kiro-confirm-access'],
+      ['kiro-submit-password'],
+      ['kiro-complete-register-consent'],
+      ['kiro-start-desktop-authorize'],
+      ['kiro-complete-desktop-authorize'],
       ['kiro-upload-credential'],
       [],
     ]

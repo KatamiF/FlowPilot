@@ -178,7 +178,7 @@ test('tab runtime replays retryable transport recovery hook and surfaces a local
     getSourceLabel: () => 'Kiro 授权页',
     getState: async () => ({
       tabRegistry: {
-        'kiro-device-auth': { tabId: 9, ready: true },
+        'kiro-register-page': { tabId: 9, ready: true },
       },
       sourceLastUrls: {},
     }),
@@ -190,7 +190,7 @@ test('tab runtime replays retryable transport recovery hook and surfaces a local
   });
 
   await assert.rejects(
-    runtime.sendToContentScriptResilient('kiro-device-auth', {
+    runtime.sendToContentScriptResilient('kiro-register-page', {
       type: 'ENSURE_KIRO_PAGE_STATE',
       payload: {},
     }, {

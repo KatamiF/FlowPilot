@@ -8,21 +8,21 @@ test('background node registry preserves node metadata even before an executor i
   const registry = api.createNodeRegistry([
     {
       flowId: 'kiro',
-      nodeId: 'kiro-start-device-login',
+      nodeId: 'kiro-open-register-page',
       displayOrder: 1,
-      executeKey: 'kiro-start-device-login',
-      title: 'Start device login',
+      executeKey: 'kiro-open-register-page',
+      title: '打开注册页',
     },
   ]);
 
-  const node = registry.getNodeDefinition('kiro-start-device-login');
+  const node = registry.getNodeDefinition('kiro-open-register-page');
 
   assert.equal(node.flowId, 'kiro');
   assert.equal(node.displayOrder, 1);
-  assert.equal(node.title, 'Start device login');
+  assert.equal(node.title, '打开注册页');
   assert.throws(
-    () => registry.executeNode('kiro-start-device-login', {}),
-    /Missing node executor: kiro-start-device-login/
+    () => registry.executeNode('kiro-open-register-page', {}),
+    /Missing node executor: kiro-open-register-page/
   );
 });
 

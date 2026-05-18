@@ -123,7 +123,8 @@
     'mail-2925',
     'inbucket-mail',
     'plus-checkout',
-    'kiro-device-auth',
+    'kiro-register-page',
+    'kiro-desktop-authorize',
   ]);
 
   function normalizeHostname(hostname = '') {
@@ -325,7 +326,8 @@
           return candidate.hostname.endsWith('paypal.com');
         case 'gopay-flow':
           return /gopay|gojek/i.test(candidate.hostname);
-        case 'kiro-device-auth':
+        case 'kiro-register-page':
+        case 'kiro-desktop-authorize':
           return isKiroAuthHost(candidate.hostname);
         default:
           return false;
@@ -349,7 +351,7 @@
       if (normalizedHostname === 'www.icloud.com' || normalizedHostname === 'www.icloud.com.cn') return 'icloud-mail';
       if (normalizedUrl.includes('duckduckgo.com/email/settings/autofill')) return 'duck-mail';
       if (normalizedUrl.includes('2925.com')) return 'mail-2925';
-      if (isKiroAuthHost(normalizedHostname)) return 'kiro-device-auth';
+      if (isKiroAuthHost(normalizedHostname)) return 'kiro-register-page';
       if (isSignupEntryHost(normalizedHostname)) return 'chatgpt';
       return 'unknown-source';
     }

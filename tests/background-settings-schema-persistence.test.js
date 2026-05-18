@@ -60,9 +60,8 @@ const DEFAULT_SUB2API_GROUP_NAMES = ['codex', 'openai-plus'];
 const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
   'activeFlowId',
   'openaiIntegrationTargetId',
-  'kiroIntegrationTargetId',
   'panelMode',
-  'kiroSourceId',
+  'kiroTargetId',
   'vpsUrl',
   'vpsPassword',
   'localCpaStep9Mode',
@@ -101,7 +100,7 @@ const PERSISTED_SETTING_DEFAULTS = {
   ipProxyEnabled: false,
   ipProxyService: '711proxy',
   ipProxyMode: 'account',
-  kiroSourceId: 'kiro-rs',
+  kiroTargetId: 'kiro-rs',
   kiroRsUrl: 'https://kiro.leftcode.xyz/admin',
   kiroRsKey: '',
   stepExecutionRangeByFlow: {},
@@ -194,15 +193,15 @@ test('buildPersistentSettingsPayload writes canonical settings schema into persi
   }, { fillDefaults: true });
 
   assert.equal(payload.activeFlowId, 'kiro');
-  assert.equal(payload.kiroSourceId, 'kiro-rs');
+  assert.equal(payload.kiroTargetId, 'kiro-rs');
   assert.equal(payload.kiroRsUrl, 'https://kiro.example.com/admin');
   assert.equal(payload.kiroRsKey, 'secret-key');
   assert.equal(Object.prototype.hasOwnProperty.call(payload, 'kiroRegion'), false);
   assert.equal(payload.settingsSchemaVersion, 4);
   assert.equal(payload.settingsState.activeFlowId, 'kiro');
-  assert.equal(payload.settingsState.flows.kiro.integrationTargetId, 'kiro-rs');
+  assert.equal(payload.settingsState.flows.kiro.targetId, 'kiro-rs');
   assert.equal(
-    payload.settingsState.flows.kiro.integrationTargets['kiro-rs'].baseUrl,
+    payload.settingsState.flows.kiro.targets['kiro-rs'].baseUrl,
     'https://kiro.example.com/admin'
   );
 });
@@ -256,15 +255,15 @@ test('buildPersistentSettingsPayload accepts schema-only input when requireKnown
           },
         },
         kiro: {
-          integrationTargetId: 'kiro-rs',
-          integrationTargets: {
+          targetId: 'kiro-rs',
+          targets: {
             'kiro-rs': {
               baseUrl: 'https://kiro.example.com/admin',
               apiKey: 'schema-only-key',
             },
           },
           autoRun: {
-            stepExecutionRange: { enabled: true, fromStep: 1, toStep: 7 },
+            stepExecutionRange: { enabled: true, fromStep: 1, toStep: 9 },
           },
         },
       },
@@ -272,7 +271,7 @@ test('buildPersistentSettingsPayload accepts schema-only input when requireKnown
   }, { requireKnownKeys: true });
 
   assert.equal(payload.activeFlowId, 'kiro');
-  assert.equal(payload.kiroSourceId, 'kiro-rs');
+  assert.equal(payload.kiroTargetId, 'kiro-rs');
   assert.equal(payload.kiroRsUrl, 'https://kiro.example.com/admin');
   assert.equal(payload.kiroRsKey, 'schema-only-key');
   assert.equal(Object.prototype.hasOwnProperty.call(payload, 'kiroRegion'), false);
@@ -357,15 +356,15 @@ const chrome = {
                 },
               },
               kiro: {
-                integrationTargetId: 'kiro-rs',
-                integrationTargets: {
+                targetId: 'kiro-rs',
+                targets: {
                   'kiro-rs': {
                     baseUrl: 'https://kiro.example.com/admin',
                     apiKey: 'stored-key',
                   },
                 },
                 autoRun: {
-                  stepExecutionRange: { enabled: true, fromStep: 1, toStep: 7 },
+                  stepExecutionRange: { enabled: true, fromStep: 1, toStep: 9 },
                 },
               },
             },
@@ -389,7 +388,7 @@ const chrome = {
   assert.deepEqual(state.stepExecutionRangeByFlow.kiro, {
     enabled: true,
     fromStep: 1,
-    toStep: 7,
+    toStep: 9,
   });
 });
 
@@ -466,15 +465,15 @@ function getRemovedKeys() {
           },
         },
         kiro: {
-          integrationTargetId: 'kiro-rs',
-          integrationTargets: {
+          targetId: 'kiro-rs',
+          targets: {
             'kiro-rs': {
               baseUrl: 'https://kiro.example.com/admin',
               apiKey: 'nested-only-key',
             },
           },
           autoRun: {
-            stepExecutionRange: { enabled: true, fromStep: 1, toStep: 7 },
+            stepExecutionRange: { enabled: true, fromStep: 1, toStep: 9 },
           },
         },
       },
@@ -484,6 +483,7 @@ function getRemovedKeys() {
   const write = api.getPersistedWrites().at(-1);
 
   assert.equal(persisted.activeFlowId, 'kiro');
+  assert.equal(persisted.kiroTargetId, 'kiro-rs');
   assert.equal(persisted.kiroRsUrl, 'https://kiro.example.com/admin');
   assert.equal(persisted.kiroRsKey, 'nested-only-key');
   assert.equal(Object.prototype.hasOwnProperty.call(persisted, 'kiroRegion'), false);
@@ -494,7 +494,7 @@ function getRemovedKeys() {
   assert.equal(Object.prototype.hasOwnProperty.call(write, 'kiroRegion'), false);
   assert.equal(write.settingsSchemaVersion, 4);
   assert.equal(write.settingsState.activeFlowId, 'kiro');
-  assert.equal(write.settingsState.flows.kiro.integrationTargetId, 'kiro-rs');
+  assert.equal(write.settingsState.flows.kiro.targetId, 'kiro-rs');
   assert.ok(api.getRemovedKeys().includes('panelMode'));
   assert.ok(api.getRemovedKeys().includes('kiroRsUrl'));
 });

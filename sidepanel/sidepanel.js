@@ -4129,11 +4129,11 @@ function collectSettingsPayload() {
       return normalized === 'sub2api' || normalized === 'codex2api' ? normalized : 'cpa';
     });
   const rawPanelMode = normalizePanelModeSafe(selectPanelMode?.value || latestState?.panelMode || 'cpa');
-  const selectedSourceId = typeof getSelectedSourceId === 'function'
-    ? getSelectedSourceId(activeFlowId)
+  const selectedTargetId = typeof getSelectedTargetId === 'function'
+    ? getSelectedTargetId(activeFlowId)
     : (activeFlowId === defaultFlowId
       ? rawPanelMode
-      : String(selectPanelMode?.value || latestState?.kiroSourceId || 'kiro-rs').trim().toLowerCase() || 'kiro-rs');
+      : String(selectPanelMode?.value || latestState?.kiroTargetId || 'kiro-rs').trim().toLowerCase() || 'kiro-rs');
   const rawPlusModeEnabled = typeof inputPlusModeEnabled !== 'undefined' && inputPlusModeEnabled
     ? Boolean(inputPlusModeEnabled.checked)
     : Boolean(latestState?.plusModeEnabled);
@@ -4141,7 +4141,7 @@ function collectSettingsPayload() {
   const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
     ? resolveCurrentSidepanelCapabilities({
       activeFlowId,
-      sourceId: selectedSourceId,
+      targetId: selectedTargetId,
       panelMode: rawPanelMode,
       signupMethod: selectedSignupMethod,
       state: {
@@ -4149,7 +4149,7 @@ function collectSettingsPayload() {
         activeFlowId,
         ...(activeFlowId === defaultFlowId
           ? { panelMode: rawPanelMode }
-          : { kiroSourceId: selectedSourceId }),
+          : { kiroTargetId: selectedTargetId }),
         plusModeEnabled: rawPlusModeEnabled,
         phoneVerificationEnabled: rawPhoneVerificationEnabled,
         signupMethod: selectedSignupMethod,
@@ -4164,13 +4164,14 @@ function collectSettingsPayload() {
         ? registry.resolveSidepanelCapabilities({
           activeFlowId,
           panelMode: rawPanelMode,
+          targetId: selectedTargetId,
           signupMethod: selectedSignupMethod,
           state: {
             ...(latestState || {}),
             activeFlowId,
             ...(activeFlowId === defaultFlowId
               ? { panelMode: rawPanelMode }
-              : { kiroSourceId: selectedSourceId }),
+              : { kiroTargetId: selectedTargetId }),
             plusModeEnabled: rawPlusModeEnabled,
             phoneVerificationEnabled: rawPhoneVerificationEnabled,
             signupMethod: selectedSignupMethod,
@@ -4179,7 +4180,7 @@ function collectSettingsPayload() {
         : null;
     })();
   const effectivePanelMode = capabilityState?.effectivePanelMode || capabilityState?.panelMode || rawPanelMode;
-  const effectiveSourceId = capabilityState?.effectiveSourceId || selectedSourceId;
+  const effectiveTargetId = capabilityState?.effectiveTargetId || selectedTargetId;
   const effectivePlusModeEnabled = capabilityState
     ? Boolean(capabilityState.runtimeLocks?.plusModeEnabled)
     : rawPlusModeEnabled;
@@ -4246,10 +4247,10 @@ function collectSettingsPayload() {
   const defaultKiroRsUrl = String(
     flowRegistryApi?.DEFAULT_KIRO_RS_URL || 'https://kiro.leftcode.xyz/admin'
   ).trim() || 'https://kiro.leftcode.xyz/admin';
-  const normalizeKiroSourceIdSafe = typeof normalizeSourceIdForFlow === 'function'
-    ? normalizeSourceIdForFlow
-    : ((_flowId, sourceId = '', fallback = 'kiro-rs') => {
-      const normalized = String(sourceId || '').trim().toLowerCase();
+  const normalizeKiroTargetIdSafe = typeof normalizeTargetIdForFlow === 'function'
+    ? normalizeTargetIdForFlow
+    : ((_flowId, targetId = '', fallback = 'kiro-rs') => {
+      const normalized = String(targetId || '').trim().toLowerCase();
       return normalized || String(fallback || '').trim().toLowerCase() || 'kiro-rs';
     });
   return {
@@ -4257,11 +4258,11 @@ function collectSettingsPayload() {
     ...(contributionModeEnabled ? {} : {
       ...(activeFlowId === defaultFlowId ? { panelMode: effectivePanelMode } : {}),
     }),
-    kiroSourceId: normalizeKiroSourceIdSafe(
+    kiroTargetId: normalizeKiroTargetIdSafe(
       'kiro',
       activeFlowId === 'kiro'
-        ? effectiveSourceId
-        : (latestState?.kiroSourceId || 'kiro-rs'),
+        ? effectiveTargetId
+        : (latestState?.kiroTargetId || 'kiro-rs'),
       'kiro-rs'
     ),
     kiroRsUrl: String(
@@ -8240,26 +8241,26 @@ function normalizeFlowId(value = '', fallback = DEFAULT_ACTIVE_FLOW_ID) {
   return normalized || fallbackValue || DEFAULT_ACTIVE_FLOW_ID;
 }
 
-function getDefaultSourceIdForFlow(flowId = DEFAULT_ACTIVE_FLOW_ID) {
+function getDefaultTargetIdForFlow(flowId = DEFAULT_ACTIVE_FLOW_ID) {
   const registry = getFlowRegistry();
-  if (registry?.getDefaultSourceId) {
-    return registry.getDefaultSourceId(normalizeFlowId(flowId));
+  if (registry?.getDefaultTargetId) {
+    return registry.getDefaultTargetId(normalizeFlowId(flowId));
   }
   return normalizeFlowId(flowId) === 'kiro' ? 'kiro-rs' : 'cpa';
 }
 
-function normalizeSourceIdForFlow(flowId = DEFAULT_ACTIVE_FLOW_ID, sourceId = '', fallback = '') {
+function normalizeTargetIdForFlow(flowId = DEFAULT_ACTIVE_FLOW_ID, targetId = '', fallback = '') {
   const normalizedFlowId = normalizeFlowId(flowId);
   const registry = getFlowRegistry();
-  const fallbackSourceId = fallback || getDefaultSourceIdForFlow(normalizedFlowId);
-  if (registry?.normalizeSourceId) {
-    return registry.normalizeSourceId(normalizedFlowId, sourceId, fallbackSourceId);
+  const fallbackTargetId = fallback || getDefaultTargetIdForFlow(normalizedFlowId);
+  if (registry?.normalizeTargetId) {
+    return registry.normalizeTargetId(normalizedFlowId, targetId, fallbackTargetId);
   }
   if (normalizedFlowId === DEFAULT_ACTIVE_FLOW_ID) {
-    return normalizePanelMode(sourceId || fallbackSourceId);
+    return normalizePanelMode(targetId || fallbackTargetId);
   }
-  const normalized = String(sourceId || '').trim().toLowerCase();
-  return normalized || String(fallbackSourceId || '').trim().toLowerCase() || 'kiro-rs';
+  const normalized = String(targetId || '').trim().toLowerCase();
+  return normalized || String(fallbackTargetId || '').trim().toLowerCase() || 'kiro-rs';
 }
 
 function getSelectedFlowId(state = latestState) {
@@ -8272,36 +8273,36 @@ function getSelectedFlowId(state = latestState) {
   );
 }
 
-function getSelectedSourceIdForState(state = latestState, flowId = getSelectedFlowId(state)) {
+function getSelectedTargetIdForState(state = latestState, flowId = getSelectedFlowId(state)) {
   const normalizedFlowId = normalizeFlowId(flowId);
   const schema = getSettingsSchema();
-  if (schema?.getSelectedSourceId) {
-    return schema.getSelectedSourceId(state || {}, normalizedFlowId);
+  if (schema?.getSelectedTargetId) {
+    return schema.getSelectedTargetId(state || {}, normalizedFlowId);
   }
   if (normalizedFlowId === DEFAULT_ACTIVE_FLOW_ID) {
-    return normalizePanelMode(state?.panelMode || getDefaultSourceIdForFlow(normalizedFlowId));
+    return normalizePanelMode(state?.panelMode || getDefaultTargetIdForFlow(normalizedFlowId));
   }
-  return normalizeSourceIdForFlow(
+  return normalizeTargetIdForFlow(
     normalizedFlowId,
-    state?.kiroSourceId || '',
-    getDefaultSourceIdForFlow(normalizedFlowId)
+    state?.kiroTargetId || '',
+    getDefaultTargetIdForFlow(normalizedFlowId)
   );
 }
 
-function getSelectedSourceId(flowId = getSelectedFlowId()) {
+function getSelectedTargetId(flowId = getSelectedFlowId()) {
   const normalizedFlowId = normalizeFlowId(flowId);
   const selectedValue = typeof selectPanelMode !== 'undefined' && selectPanelMode
     ? selectPanelMode.value
     : '';
   if (normalizedFlowId === DEFAULT_ACTIVE_FLOW_ID) {
     return normalizePanelMode(
-      selectedValue || latestState?.panelMode || getDefaultSourceIdForFlow(normalizedFlowId)
+      selectedValue || latestState?.panelMode || getDefaultTargetIdForFlow(normalizedFlowId)
     );
   }
-  return normalizeSourceIdForFlow(
+  return normalizeTargetIdForFlow(
     normalizedFlowId,
-    selectedValue || latestState?.kiroSourceId || '',
-    getDefaultSourceIdForFlow(normalizedFlowId)
+    selectedValue || latestState?.kiroTargetId || '',
+    getDefaultTargetIdForFlow(normalizedFlowId)
   );
 }
 
@@ -8325,35 +8326,35 @@ function renderFlowSelectorOptions(selectedFlowId = getSelectedFlowId()) {
   return flowIds;
 }
 
-function renderSourceSelectorOptions(flowId = getSelectedFlowId(), selectedSourceId = '') {
+function renderTargetSelectorOptions(flowId = getSelectedFlowId(), selectedTargetId = '') {
   if (!selectPanelMode) {
     return [];
   }
   const registry = getFlowRegistry();
   const normalizedFlowId = normalizeFlowId(flowId);
-  const sourceOptions = Array.isArray(registry?.getSourceOptions?.(normalizedFlowId))
-    ? registry.getSourceOptions(normalizedFlowId)
+  const targetOptions = Array.isArray(registry?.getTargetOptions?.(normalizedFlowId))
+    ? registry.getTargetOptions(normalizedFlowId)
     : [];
-  const normalizedSourceId = normalizeSourceIdForFlow(
+  const normalizedTargetId = normalizeTargetIdForFlow(
     normalizedFlowId,
-    selectedSourceId,
-    getDefaultSourceIdForFlow(normalizedFlowId)
+    selectedTargetId,
+    getDefaultTargetIdForFlow(normalizedFlowId)
   );
   selectPanelMode.innerHTML = '';
-  sourceOptions.forEach((sourceOption) => {
+  targetOptions.forEach((targetOption) => {
     const option = document.createElement('option');
-    option.value = sourceOption.id;
-    option.textContent = sourceOption.label || sourceOption.id;
+    option.value = targetOption.id;
+    option.textContent = targetOption.label || targetOption.id;
     selectPanelMode.appendChild(option);
   });
   if (labelSourceSelector) {
     labelSourceSelector.textContent = '来源';
   }
-  selectPanelMode.disabled = sourceOptions.length <= 1;
-  if (sourceOptions.length > 0) {
-    selectPanelMode.value = normalizedSourceId;
+  selectPanelMode.disabled = targetOptions.length <= 1;
+  if (targetOptions.length > 0) {
+    selectPanelMode.value = normalizedTargetId;
   }
-  return sourceOptions;
+  return targetOptions;
 }
 
 function collectVisibleSettingsTargets(visibleGroupIds = []) {
@@ -8414,11 +8415,11 @@ function applyFlowSettingsGroupVisibility(visibleGroupIds = []) {
 function syncFlowSelectorsFromState(state = latestState) {
   const activeFlowId = normalizeFlowId(state?.activeFlowId || state?.flowId || DEFAULT_ACTIVE_FLOW_ID);
   renderFlowSelectorOptions(activeFlowId);
-  const sourceId = getSelectedSourceIdForState(state, activeFlowId);
-  renderSourceSelectorOptions(activeFlowId, sourceId);
+  const targetId = getSelectedTargetIdForState(state, activeFlowId);
+  renderTargetSelectorOptions(activeFlowId, targetId);
   return {
     activeFlowId,
-    sourceId,
+    targetId,
   };
 }
 
@@ -8450,25 +8451,26 @@ function resolveCurrentSidepanelCapabilities(options = {}) {
     ...(options?.state || {}),
     activeFlowId,
   };
-  const sourceId = options?.sourceId !== undefined
-    ? options.sourceId
+  const targetId = options?.targetId !== undefined
+    ? options.targetId
     : (activeFlowId === DEFAULT_ACTIVE_FLOW_ID
       ? (options?.panelMode ?? state?.panelMode)
-      : (options?.kiroSourceId ?? state?.kiroSourceId));
+      : (options?.kiroTargetId ?? state?.kiroTargetId));
   if (activeFlowId === DEFAULT_ACTIVE_FLOW_ID) {
     state.panelMode = normalizePanelMode(
-      sourceId || state?.panelMode || getDefaultSourceIdForFlow(activeFlowId)
+      targetId || state?.panelMode || getDefaultTargetIdForFlow(activeFlowId)
     );
   } else {
-    state.kiroSourceId = normalizeSourceIdForFlow(
+    state.kiroTargetId = normalizeTargetIdForFlow(
       activeFlowId,
-      sourceId || state?.kiroSourceId || '',
-      getDefaultSourceIdForFlow(activeFlowId)
+      targetId || state?.kiroTargetId || '',
+      getDefaultTargetIdForFlow(activeFlowId)
     );
   }
   return registry.resolveSidepanelCapabilities({
     activeFlowId,
     panelMode: state?.panelMode,
+    targetId: activeFlowId === DEFAULT_ACTIVE_FLOW_ID ? state?.panelMode : state?.kiroTargetId,
     signupMethod: options?.signupMethod ?? state?.signupMethod,
     state,
   });
@@ -9912,7 +9914,7 @@ function applySettingsState(state) {
     ? syncFlowSelectorsFromState(state)
     : {
       activeFlowId: String(state?.activeFlowId || state?.flowId || defaultActiveFlowId).trim().toLowerCase() || defaultActiveFlowId,
-      sourceId: String(state?.panelMode || 'cpa').trim().toLowerCase() || 'cpa',
+      targetId: String(state?.panelMode || 'cpa').trim().toLowerCase() || 'cpa',
     };
   if (typeof applyOperationDelayState === 'function') {
     applyOperationDelayState(state);
@@ -10029,24 +10031,21 @@ function applySettingsState(state) {
   }
   if (typeof displayKiroDeviceCode !== 'undefined' && displayKiroDeviceCode) {
     const kiroDeviceCode = String(
-      state?.flows?.kiro?.auth?.deviceCode
-      || state?.kiroDeviceCode
+      state?.kiroRuntime?.register?.userCode
       || ''
     ).trim();
     displayKiroDeviceCode.textContent = kiroDeviceCode || '未生成';
   }
   if (typeof displayKiroLoginUrl !== 'undefined' && displayKiroLoginUrl) {
     const kiroLoginUrl = String(
-      state?.flows?.kiro?.auth?.loginUrl
-      || state?.kiroLoginUrl
+      state?.kiroRuntime?.register?.loginUrl
       || ''
     ).trim();
     displayKiroLoginUrl.textContent = kiroLoginUrl || '未生成';
   }
   if (typeof displayKiroUploadStatus !== 'undefined' && displayKiroUploadStatus) {
     const kiroUploadStatus = String(
-      state?.flows?.kiro?.upload?.status
-      || state?.kiroUploadStatus
+      state?.kiroRuntime?.upload?.status
       || ''
     ).trim();
     displayKiroUploadStatus.textContent = getKiroUploadStatusLabel(kiroUploadStatus);
@@ -10139,8 +10138,8 @@ function applySettingsState(state) {
   if (typeof selectFlow !== 'undefined' && selectFlow) {
     selectFlow.value = appliedFlowSelection.activeFlowId;
   }
-  if (selectPanelMode && appliedFlowSelection.sourceId) {
-    selectPanelMode.value = appliedFlowSelection.sourceId;
+  if (selectPanelMode && appliedFlowSelection.targetId) {
+    selectPanelMode.value = appliedFlowSelection.targetId;
   }
   inputCodex2ApiUrl.value = state?.codex2apiUrl || '';
   inputCodex2ApiAdminKey.value = state?.codex2apiAdminKey || '';
@@ -12091,36 +12090,36 @@ function updatePanelModeUI() {
   const activeFlowId = typeof getSelectedFlowId === 'function'
     ? getSelectedFlowId(latestState)
     : normalizeFlowId(latestState?.activeFlowId || latestState?.flowId || DEFAULT_ACTIVE_FLOW_ID);
-  const sourceId = typeof getSelectedSourceId === 'function'
-    ? getSelectedSourceId(activeFlowId)
+  const targetId = typeof getSelectedTargetId === 'function'
+    ? getSelectedTargetId(activeFlowId)
     : (activeFlowId === DEFAULT_ACTIVE_FLOW_ID
       ? normalizePanelMode(selectPanelMode?.value || latestState?.panelMode || 'cpa')
-      : String(selectPanelMode?.value || latestState?.kiroSourceId || 'kiro-rs').trim().toLowerCase() || 'kiro-rs');
+      : String(selectPanelMode?.value || latestState?.kiroTargetId || 'kiro-rs').trim().toLowerCase() || 'kiro-rs');
   const rawPanelMode = activeFlowId === DEFAULT_ACTIVE_FLOW_ID
-    ? normalizePanelMode(sourceId || latestState?.panelMode || 'cpa')
+    ? normalizePanelMode(targetId || latestState?.panelMode || 'cpa')
     : normalizePanelMode(latestState?.panelMode || 'cpa');
   const capabilityState = typeof resolveCurrentSidepanelCapabilities === 'function'
     ? resolveCurrentSidepanelCapabilities({
       activeFlowId,
-      sourceId,
+      targetId,
       panelMode: rawPanelMode,
       state: {
         ...(latestState || {}),
         activeFlowId,
         ...(activeFlowId === DEFAULT_ACTIVE_FLOW_ID
           ? { panelMode: rawPanelMode }
-          : { kiroSourceId: sourceId }),
+          : { kiroTargetId: targetId }),
       },
     })
     : null;
-  const effectiveSourceId = capabilityState?.effectiveSourceId || sourceId;
+  const effectiveTargetId = capabilityState?.effectiveTargetId || targetId;
   renderFlowSelectorOptions(activeFlowId);
-  renderSourceSelectorOptions(activeFlowId, effectiveSourceId);
+  renderTargetSelectorOptions(activeFlowId, effectiveTargetId);
   if (selectFlow) {
     selectFlow.value = activeFlowId;
   }
   if (selectPanelMode) {
-    selectPanelMode.value = effectiveSourceId;
+    selectPanelMode.value = effectiveTargetId;
   }
   const visibleGroupIds = Array.isArray(capabilityState?.visibleGroupIds)
     ? capabilityState.visibleGroupIds
@@ -13202,7 +13201,7 @@ stepsList?.addEventListener('click', async (event) => {
     if (step === gpcCreateStep && !(await ensureGpcApiKeyReadyForStart())) {
       return;
     }
-    const shouldPersistSharedPassword = nodeId === 'fill-password' || nodeId === 'kiro-fill-password';
+    const shouldPersistSharedPassword = nodeId === 'fill-password' || nodeId === 'kiro-submit-password';
     if (shouldPersistSharedPassword && inputPassword.value !== (latestState?.customPassword || '')) {
       await chrome.runtime.sendMessage({
         type: 'SAVE_SETTING',
@@ -13553,12 +13552,12 @@ async function startAutoRunFromCurrentSettings() {
   const activeFlowId = typeof getSelectedFlowId === 'function'
     ? getSelectedFlowId(latestState)
     : (String(latestState?.activeFlowId || latestState?.flowId || DEFAULT_ACTIVE_FLOW_ID).trim().toLowerCase() || DEFAULT_ACTIVE_FLOW_ID);
-  const sourceId = typeof getSelectedSourceId === 'function'
-    ? getSelectedSourceId(activeFlowId)
+  const targetId = typeof getSelectedTargetId === 'function'
+    ? getSelectedTargetId(activeFlowId)
     : (
       activeFlowId === DEFAULT_ACTIVE_FLOW_ID
         ? normalizePanelMode(latestState?.panelMode || 'cpa')
-        : (String(latestState?.kiroSourceId || 'kiro-rs').trim().toLowerCase() || 'kiro-rs')
+        : (String(latestState?.kiroTargetId || 'kiro-rs').trim().toLowerCase() || 'kiro-rs')
     );
   inputAutoDelayMinutes.value = String(delayMinutes);
   btnAutoRun.innerHTML = delayEnabled
@@ -13571,7 +13570,7 @@ async function startAutoRunFromCurrentSettings() {
       totalRuns,
       delayMinutes,
       activeFlowId,
-      sourceId,
+      targetId,
       autoRunSkipFailures,
       contributionMode: Boolean(latestState?.contributionMode),
       contributionNickname,
@@ -14102,32 +14101,32 @@ selectPanelMode.addEventListener('change', async () => {
   const activeFlowId = typeof getSelectedFlowId === 'function'
     ? getSelectedFlowId(latestState)
     : normalizeFlowId(latestState?.activeFlowId || latestState?.flowId || DEFAULT_ACTIVE_FLOW_ID);
-  const defaultSourceId = typeof getDefaultSourceIdForFlow === 'function'
-    ? getDefaultSourceIdForFlow(activeFlowId)
+  const defaultTargetId = typeof getDefaultTargetIdForFlow === 'function'
+    ? getDefaultTargetIdForFlow(activeFlowId)
     : (activeFlowId === DEFAULT_ACTIVE_FLOW_ID ? 'cpa' : 'kiro-rs');
-  const previousSourceId = typeof getSelectedSourceIdForState === 'function'
-    ? getSelectedSourceIdForState(latestState, activeFlowId)
+  const previousTargetId = typeof getSelectedTargetIdForState === 'function'
+    ? getSelectedTargetIdForState(latestState, activeFlowId)
     : (activeFlowId === DEFAULT_ACTIVE_FLOW_ID
-      ? normalizePanelMode(latestState?.panelMode || defaultSourceId)
-      : String(latestState?.kiroSourceId || defaultSourceId).trim().toLowerCase() || defaultSourceId);
-  let nextSourceId = typeof normalizeSourceIdForFlow === 'function'
-    ? normalizeSourceIdForFlow(activeFlowId, selectPanelMode.value, defaultSourceId)
+      ? normalizePanelMode(latestState?.panelMode || defaultTargetId)
+      : String(latestState?.kiroTargetId || defaultTargetId).trim().toLowerCase() || defaultTargetId);
+  let nextTargetId = typeof normalizeTargetIdForFlow === 'function'
+    ? normalizeTargetIdForFlow(activeFlowId, selectPanelMode.value, defaultTargetId)
     : (activeFlowId === DEFAULT_ACTIVE_FLOW_ID
       ? normalizePanelMode(selectPanelMode.value)
-      : String(selectPanelMode.value || defaultSourceId).trim().toLowerCase() || defaultSourceId);
+      : String(selectPanelMode.value || defaultTargetId).trim().toLowerCase() || defaultTargetId);
   if (activeFlowId === DEFAULT_ACTIVE_FLOW_ID) {
-    const nextPanelMode = normalizePanelMode(nextSourceId);
+    const nextPanelMode = normalizePanelMode(nextTargetId);
     selectPanelMode.value = nextPanelMode;
     const confirmed = await confirmCpaPhoneSignupIfNeeded({
       signupMethod: getSelectedSignupMethod(),
       panelMode: nextPanelMode,
     });
     if (!confirmed) {
-      selectPanelMode.value = previousSourceId;
+      selectPanelMode.value = previousTargetId;
       updatePanelModeUI();
       return;
     }
-    nextSourceId = nextPanelMode;
+    nextTargetId = nextPanelMode;
     syncLatestState({
       activeFlowId,
       flowId: activeFlowId,
@@ -14137,7 +14136,7 @@ selectPanelMode.addEventListener('change', async () => {
     syncLatestState({
       activeFlowId,
       flowId: activeFlowId,
-      kiroSourceId: nextSourceId,
+      kiroTargetId: nextTargetId,
     });
   }
   updatePanelModeUI();
@@ -14941,23 +14940,23 @@ selectFlow?.addEventListener('change', () => {
     activeFlowId: nextActiveFlowId,
     flowId: nextActiveFlowId,
   };
-  const defaultSourceId = typeof getDefaultSourceIdForFlow === 'function'
-    ? getDefaultSourceIdForFlow(nextActiveFlowId)
+  const defaultTargetId = typeof getDefaultTargetIdForFlow === 'function'
+    ? getDefaultTargetIdForFlow(nextActiveFlowId)
     : (nextActiveFlowId === DEFAULT_ACTIVE_FLOW_ID ? 'cpa' : 'kiro-rs');
-  const nextSourceId = typeof getSelectedSourceIdForState === 'function'
-    ? getSelectedSourceIdForState(nextStateBase, nextActiveFlowId)
+  const nextTargetId = typeof getSelectedTargetIdForState === 'function'
+    ? getSelectedTargetIdForState(nextStateBase, nextActiveFlowId)
     : (nextActiveFlowId === DEFAULT_ACTIVE_FLOW_ID
-      ? normalizePanelMode(nextStateBase?.panelMode || defaultSourceId)
-      : String(nextStateBase?.kiroSourceId || defaultSourceId).trim().toLowerCase() || defaultSourceId);
+      ? normalizePanelMode(nextStateBase?.panelMode || defaultTargetId)
+      : String(nextStateBase?.kiroTargetId || defaultTargetId).trim().toLowerCase() || defaultTargetId);
   syncLatestState({
     activeFlowId: nextActiveFlowId,
     flowId: nextActiveFlowId,
     ...(nextActiveFlowId === DEFAULT_ACTIVE_FLOW_ID
-      ? { panelMode: normalizePanelMode(nextSourceId || defaultSourceId) }
+      ? { panelMode: normalizePanelMode(nextTargetId || defaultTargetId) }
       : {
-        kiroSourceId: typeof normalizeSourceIdForFlow === 'function'
-          ? normalizeSourceIdForFlow(nextActiveFlowId, nextSourceId, defaultSourceId)
-          : (String(nextSourceId || defaultSourceId).trim().toLowerCase() || defaultSourceId),
+        kiroTargetId: typeof normalizeTargetIdForFlow === 'function'
+          ? normalizeTargetIdForFlow(nextActiveFlowId, nextTargetId, defaultTargetId)
+          : (String(nextTargetId || defaultTargetId).trim().toLowerCase() || defaultTargetId),
       }),
   });
   updatePanelModeUI();
@@ -15882,7 +15881,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         message.payload.panelMode !== undefined
         || message.payload.activeFlowId !== undefined
         || message.payload.flowId !== undefined
-        || message.payload.kiroSourceId !== undefined
+        || message.payload.kiroTargetId !== undefined
       ) {
         if (typeof syncFlowSelectorsFromState === 'function') {
           syncFlowSelectorsFromState(latestState);

@@ -5,11 +5,11 @@
   const flowRegistryApi = rootScope.MultiPageFlowRegistry || {};
   const settingsSchemaApi = rootScope.MultiPageSettingsSchema || {};
   const DEFAULT_FLOW_ID = flowRegistryApi.DEFAULT_FLOW_ID || 'openai';
-  const DEFAULT_OPENAI_INTEGRATION_TARGET_ID = flowRegistryApi.DEFAULT_OPENAI_INTEGRATION_TARGET_ID || 'cpa';
+  const DEFAULT_OPENAI_TARGET_ID = flowRegistryApi.DEFAULT_OPENAI_TARGET_ID || 'cpa';
   const SIGNUP_METHOD_EMAIL = 'email';
   const SIGNUP_METHOD_PHONE = 'phone';
-  const VALID_OPENAI_INTEGRATION_TARGET_IDS = Array.isArray(flowRegistryApi.OPENAI_INTEGRATION_TARGET_IDS)
-    ? flowRegistryApi.OPENAI_INTEGRATION_TARGET_IDS.slice()
+  const VALID_OPENAI_TARGET_IDS = Array.isArray(flowRegistryApi.OPENAI_TARGET_IDS)
+    ? flowRegistryApi.OPENAI_TARGET_IDS.slice()
     : ['cpa', 'sub2api', 'codex2api'];
   const REGISTERED_FLOW_IDS = Array.isArray(flowRegistryApi.getRegisteredFlowIds?.())
     ? flowRegistryApi.getRegisteredFlowIds().map((flowId) => String(flowId || '').trim().toLowerCase()).filter(Boolean)
@@ -22,12 +22,12 @@
     supportsPhoneVerificationSettings: false,
     supportsPlusMode: false,
     supportsContributionMode: false,
-    supportedIntegrationTargets: [],
+    supportedTargetIds: [],
     supportsLuckmail: false,
     supportsOauthTimeoutBudget: false,
     canSwitchFlow: true,
     stepDefinitionMode: 'default',
-    sourceSelectorLabel: '来源',
+    targetSelectorLabel: '来源',
   });
 
   const FLOW_CAPABILITIES = Object.freeze(
@@ -47,7 +47,7 @@
     )
   );
 
-  const DEFAULT_INTEGRATION_TARGET_CAPABILITIES = Object.freeze({
+  const DEFAULT_TARGET_CAPABILITIES = Object.freeze({
     supportsPhoneSignup: true,
     requiresPhoneSignupWarning: false,
   });
@@ -59,12 +59,11 @@
     'phoneVerificationEnabled',
     'plusModeEnabled',
     'signupMethod',
-    'kiroSourceId',
     'openaiIntegrationTargetId',
-    'kiroIntegrationTargetId',
+    'kiroTargetId',
   ]);
 
-  const OPENAI_INTEGRATION_TARGET_CAPABILITIES = Object.freeze({
+  const OPENAI_TARGET_CAPABILITIES = Object.freeze({
     cpa: Object.freeze({
       supportsPhoneSignup: true,
       requiresPhoneSignupWarning: true,
@@ -100,15 +99,15 @@
     return Boolean(normalized) && REGISTERED_FLOW_ID_SET.has(normalized);
   }
 
-  function normalizeOpenAiIntegrationTargetId(value = '', fallback = DEFAULT_OPENAI_INTEGRATION_TARGET_ID) {
+  function normalizeOpenAiTargetId(value = '', fallback = DEFAULT_OPENAI_TARGET_ID) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (VALID_OPENAI_INTEGRATION_TARGET_IDS.includes(normalized)) {
+    if (VALID_OPENAI_TARGET_IDS.includes(normalized)) {
       return normalized;
     }
     const fallbackValue = String(fallback || '').trim().toLowerCase();
-    return VALID_OPENAI_INTEGRATION_TARGET_IDS.includes(fallbackValue)
+    return VALID_OPENAI_TARGET_IDS.includes(fallbackValue)
       ? fallbackValue
-      : DEFAULT_OPENAI_INTEGRATION_TARGET_ID;
+      : DEFAULT_OPENAI_TARGET_ID;
   }
 
   function normalizeSignupMethod(value = '') {
@@ -117,31 +116,31 @@
       : SIGNUP_METHOD_EMAIL;
   }
 
-  function normalizeOpenAiIntegrationTargetList(values = []) {
+  function normalizeOpenAiTargetList(values = []) {
     if (!Array.isArray(values)) {
       return [];
     }
     const seen = new Set();
     const normalized = [];
     values.forEach((value) => {
-      const integrationTargetId = normalizeOpenAiIntegrationTargetId(value, '');
-      if (!integrationTargetId || seen.has(integrationTargetId)) {
+      const targetId = normalizeOpenAiTargetId(value, '');
+      if (!targetId || seen.has(targetId)) {
         return;
       }
-      seen.add(integrationTargetId);
-      normalized.push(integrationTargetId);
+      seen.add(targetId);
+      normalized.push(targetId);
     });
     return normalized;
   }
 
-  function getIntegrationTargetLabel(flowId = DEFAULT_FLOW_ID, integrationTargetId = '') {
+  function getTargetLabel(flowId = DEFAULT_FLOW_ID, targetId = '') {
     if (
       isRegisteredFlowId(flowId)
-      && typeof flowRegistryApi.getIntegrationTargetLabel === 'function'
+      && typeof flowRegistryApi.getTargetLabel === 'function'
     ) {
-      return flowRegistryApi.getIntegrationTargetLabel(flowId, integrationTargetId);
+      return flowRegistryApi.getTargetLabel(flowId, targetId);
     }
-    const normalized = String(integrationTargetId || '').trim().toLowerCase();
+    const normalized = String(targetId || '').trim().toLowerCase();
     if (normalized === 'sub2api') {
       return 'SUB2API';
     }
@@ -151,16 +150,16 @@
     if (normalized === 'cpa') {
       return 'CPA';
     }
-    return normalized || String(integrationTargetId || '').trim();
+    return normalized || String(targetId || '').trim();
   }
 
   function createFlowCapabilityRegistry(deps = {}) {
     const {
       defaultFlowCapabilities = DEFAULT_FLOW_CAPABILITIES,
       defaultFlowId = DEFAULT_FLOW_ID,
-      defaultIntegrationTargetCapabilities = DEFAULT_INTEGRATION_TARGET_CAPABILITIES,
+      defaultTargetCapabilities = DEFAULT_TARGET_CAPABILITIES,
       flowCapabilities = FLOW_CAPABILITIES,
-      integrationTargetCapabilities = OPENAI_INTEGRATION_TARGET_CAPABILITIES,
+      targetCapabilities = OPENAI_TARGET_CAPABILITIES,
     } = deps;
     const settingsSchema = settingsSchemaApi.createSettingsSchema
       ? settingsSchemaApi.createSettingsSchema({
@@ -171,70 +170,69 @@
     function getFlowCapabilities(flowId) {
       const normalizedFlowId = normalizeCapabilityFlowId(flowId, defaultFlowId);
       const entry = flowCapabilities[normalizedFlowId] || null;
-      const supportedIntegrationTargets = normalizedFlowId === 'openai'
-        ? normalizeOpenAiIntegrationTargetList(
-          entry?.supportedIntegrationTargets || defaultFlowCapabilities.supportedIntegrationTargets
+      const supportedTargetIds = normalizedFlowId === 'openai'
+        ? normalizeOpenAiTargetList(
+          entry?.supportedTargetIds || defaultFlowCapabilities.supportedTargetIds
         )
-        : (Array.isArray(entry?.supportedIntegrationTargets)
-          ? entry.supportedIntegrationTargets.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
+        : (Array.isArray(entry?.supportedTargetIds)
+          ? entry.supportedTargetIds.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
           : []);
       return {
         ...defaultFlowCapabilities,
         ...(entry || {}),
-        supportedIntegrationTargets,
+        supportedTargetIds,
       };
     }
 
-    function getOpenAiIntegrationTargetCapabilities(integrationTargetId) {
-      const normalizedIntegrationTargetId = normalizeOpenAiIntegrationTargetId(integrationTargetId);
+    function getOpenAiTargetCapabilities(targetId) {
+      const normalizedTargetId = normalizeOpenAiTargetId(targetId);
       return {
-        ...defaultIntegrationTargetCapabilities,
-        ...(integrationTargetCapabilities[normalizedIntegrationTargetId] || {}),
+        ...defaultTargetCapabilities,
+        ...(targetCapabilities[normalizedTargetId] || {}),
       };
     }
 
-    function normalizeRequestedIntegrationTargetId(activeFlowId, state = {}, options = {}) {
+    function normalizeRequestedTargetId(activeFlowId, state = {}, options = {}) {
       if (activeFlowId === 'openai') {
-        return normalizeOpenAiIntegrationTargetId(
-          options?.integrationTargetId
+        return normalizeOpenAiTargetId(
+          options?.targetId
+          ?? options?.integrationTargetId
           ?? options?.panelMode
           ?? state?.openaiIntegrationTargetId
           ?? state?.panelMode,
-          DEFAULT_OPENAI_INTEGRATION_TARGET_ID
+          DEFAULT_OPENAI_TARGET_ID
         );
       }
 
-      const rawIntegrationTargetId = activeFlowId === 'kiro'
+      const rawTargetId = activeFlowId === 'kiro'
         ? (
-          options?.integrationTargetId
-          ?? state?.kiroIntegrationTargetId
-          ?? state?.kiroSourceId
-          ?? flowRegistryApi.getDefaultIntegrationTargetId?.(activeFlowId)
+          options?.targetId
+          ?? state?.kiroTargetId
+          ?? flowRegistryApi.getDefaultTargetId?.(activeFlowId)
           ?? ''
         )
         : (
-          options?.integrationTargetId
-          ?? state?.integrationTargetId
+          options?.targetId
+          ?? state?.targetId
           ?? state?.openaiIntegrationTargetId
           ?? state?.panelMode
-          ?? state?.kiroIntegrationTargetId
-          ?? state?.kiroSourceId
-          ?? flowRegistryApi.getDefaultIntegrationTargetId?.(activeFlowId)
+          ?? state?.kiroTargetId
+          ?? flowRegistryApi.getDefaultTargetId?.(activeFlowId)
           ?? ''
         );
 
       if (
         isRegisteredFlowId(activeFlowId)
-        && typeof flowRegistryApi.normalizeIntegrationTargetId === 'function'
+        && typeof flowRegistryApi.normalizeTargetId === 'function'
       ) {
-        return flowRegistryApi.normalizeIntegrationTargetId(
+        return flowRegistryApi.normalizeTargetId(
           activeFlowId,
-          rawIntegrationTargetId,
-          flowRegistryApi.getDefaultIntegrationTargetId?.(activeFlowId)
+          rawTargetId,
+          flowRegistryApi.getDefaultTargetId?.(activeFlowId)
         );
       }
 
-      return String(rawIntegrationTargetId || '').trim().toLowerCase();
+      return String(rawTargetId || '').trim().toLowerCase();
     }
 
     function normalizeChangedKeys(values = []) {
@@ -252,33 +250,33 @@
       return normalized;
     }
 
-    function resolveEffectiveIntegrationTargetId(activeFlowId, state = {}, requestedIntegrationTargetId = DEFAULT_OPENAI_INTEGRATION_TARGET_ID) {
+    function resolveEffectiveTargetId(activeFlowId, state = {}, requestedTargetId = DEFAULT_OPENAI_TARGET_ID) {
       if (!isRegisteredFlowId(activeFlowId)) {
-        return normalizeRequestedIntegrationTargetId(activeFlowId, state, {
-          integrationTargetId: requestedIntegrationTargetId,
+        return normalizeRequestedTargetId(activeFlowId, state, {
+          targetId: requestedTargetId,
         });
       }
-      if (settingsSchema?.getSelectedIntegrationTargetId) {
-        const integrationTargetId = settingsSchema.getSelectedIntegrationTargetId({
+      if (settingsSchema?.getSelectedTargetId) {
+        const targetId = settingsSchema.getSelectedTargetId({
           ...state,
           activeFlowId,
         }, activeFlowId);
-        if (integrationTargetId) {
-          return integrationTargetId;
+        if (targetId) {
+          return targetId;
         }
       }
-      if (typeof flowRegistryApi.normalizeIntegrationTargetId === 'function') {
-        return flowRegistryApi.normalizeIntegrationTargetId(
+      if (typeof flowRegistryApi.normalizeTargetId === 'function') {
+        return flowRegistryApi.normalizeTargetId(
           activeFlowId,
           activeFlowId === 'openai'
-            ? (state?.openaiIntegrationTargetId || state?.panelMode || requestedIntegrationTargetId)
-            : (state?.kiroIntegrationTargetId || state?.kiroSourceId || requestedIntegrationTargetId),
-          flowRegistryApi.getDefaultIntegrationTargetId?.(activeFlowId)
+            ? (state?.openaiIntegrationTargetId || state?.panelMode || requestedTargetId)
+            : (state?.kiroTargetId || requestedTargetId),
+          flowRegistryApi.getDefaultTargetId?.(activeFlowId)
         );
       }
       return activeFlowId === 'openai'
-        ? normalizeOpenAiIntegrationTargetId(requestedIntegrationTargetId)
-        : String(requestedIntegrationTargetId || '').trim().toLowerCase();
+        ? normalizeOpenAiTargetId(requestedTargetId)
+        : String(requestedTargetId || '').trim().toLowerCase();
     }
 
     function resolveSidepanelCapabilities(options = {}) {
@@ -288,25 +286,25 @@
         defaultFlowId
       );
       const flowState = getFlowCapabilities(activeFlowId);
-      const requestedIntegrationTargetId = normalizeRequestedIntegrationTargetId(
+      const requestedTargetId = normalizeRequestedTargetId(
         activeFlowId,
         state,
         options
       );
-      const supportedIntegrationTargets = activeFlowId === 'openai'
-        ? normalizeOpenAiIntegrationTargetList(flowState.supportedIntegrationTargets)
-        : (Array.isArray(flowState.supportedIntegrationTargets)
-          ? flowState.supportedIntegrationTargets.slice()
+      const supportedTargetIds = activeFlowId === 'openai'
+        ? normalizeOpenAiTargetList(flowState.supportedTargetIds)
+        : (Array.isArray(flowState.supportedTargetIds)
+          ? flowState.supportedTargetIds.slice()
           : []);
-      const integrationTargetSupported = supportedIntegrationTargets.length === 0
+      const targetSupported = supportedTargetIds.length === 0
         ? true
-        : supportedIntegrationTargets.includes(requestedIntegrationTargetId);
-      const effectiveIntegrationTargetId = integrationTargetSupported
-        ? requestedIntegrationTargetId
-        : (supportedIntegrationTargets[0] || requestedIntegrationTargetId);
-      const integrationTargetState = activeFlowId === 'openai'
-        ? getOpenAiIntegrationTargetCapabilities(effectiveIntegrationTargetId)
-        : defaultIntegrationTargetCapabilities;
+        : supportedTargetIds.includes(requestedTargetId);
+      const effectiveTargetId = targetSupported
+        ? requestedTargetId
+        : (supportedTargetIds[0] || requestedTargetId);
+      const targetState = activeFlowId === 'openai'
+        ? getOpenAiTargetCapabilities(effectiveTargetId)
+        : defaultTargetCapabilities;
       const runtimeLocks = {
         autoRunLocked: Boolean(options?.autoRunLocked ?? state?.autoRunLocked),
         contributionMode: activeFlowId === 'openai' && flowState.supportsContributionMode && Boolean(state?.contributionMode),
@@ -320,7 +318,7 @@
       }
       const canSelectPhoneSignup = activeFlowId === 'openai'
         && Boolean(flowState.supportsPhoneSignup)
-        && Boolean(integrationTargetState.supportsPhoneSignup)
+        && Boolean(targetState.supportsPhoneSignup)
         && runtimeLocks.phoneVerificationEnabled
         && !runtimeLocks.plusModeEnabled
         && !runtimeLocks.contributionMode;
@@ -340,7 +338,7 @@
           : effectiveSignupMethods[0]);
       const visibleGroupIds = typeof flowRegistryApi.getVisibleGroupIds === 'function'
         && isRegisteredFlowId(activeFlowId)
-        ? flowRegistryApi.getVisibleGroupIds(activeFlowId, effectiveIntegrationTargetId)
+        ? flowRegistryApi.getVisibleGroupIds(activeFlowId, effectiveTargetId)
         : [];
 
       return {
@@ -351,38 +349,38 @@
         canShowPlusSettings: activeFlowId === 'openai' && Boolean(flowState.supportsPlusMode),
         canSwitchFlow: Boolean(flowState.canSwitchFlow),
         canUsePhoneSignup: canSelectPhoneSignup,
-        canUseSelectedPanelMode: integrationTargetSupported,
-        effectiveIntegrationTargetId,
-        effectivePanelMode: effectiveIntegrationTargetId,
+        canUseSelectedTarget: targetSupported,
+        effectivePanelMode: effectiveTargetId,
         effectiveSignupMethod,
         effectiveSignupMethods,
-        effectiveSourceId: effectiveIntegrationTargetId,
+        effectiveTargetId,
         flowCapabilities: flowState,
-        integrationTargetCapabilities: integrationTargetState,
-        panelCapabilities: integrationTargetState,
-        panelMode: effectiveIntegrationTargetId,
-        requestedIntegrationTargetId,
-        requestedPanelMode: requestedIntegrationTargetId,
+        panelCapabilities: targetState,
+        panelMode: effectiveTargetId,
         requestedSignupMethod,
+        requestedTargetId,
         runtimeLocks,
         shouldWarnCpaPhoneSignup: effectiveSignupMethod === SIGNUP_METHOD_PHONE
-          && Boolean(integrationTargetState.requiresPhoneSignupWarning),
+          && Boolean(targetState.requiresPhoneSignupWarning),
         stepDefinitionOptions: {
           activeFlowId,
-          integrationTargetId: effectiveIntegrationTargetId,
-          panelMode: effectiveIntegrationTargetId,
+          integrationTargetId: effectiveTargetId,
+          panelMode: effectiveTargetId,
+          targetId: effectiveTargetId,
           plusModeEnabled: runtimeLocks.plusModeEnabled,
           signupMethod: effectiveSignupMethod,
         },
-        supportedIntegrationTargets,
-        supportedPanelModes: supportedIntegrationTargets,
+        supportedPanelModes: supportedTargetIds,
+        supportedTargetIds,
+        targetCapabilities: targetState,
+        targetId: effectiveTargetId,
         visibleGroupIds,
       };
     }
 
     function buildPhoneSignupValidationError(capabilityState = {}) {
       const flowState = capabilityState.flowCapabilities || {};
-      const integrationTargetState = capabilityState.integrationTargetCapabilities || {};
+      const targetState = capabilityState.targetCapabilities || {};
       const runtimeLocks = capabilityState.runtimeLocks || {};
 
       if (!flowState.supportsPhoneSignup) {
@@ -391,10 +389,10 @@
           message: '当前 flow 不支持手机号注册。',
         };
       }
-      if (!integrationTargetState.supportsPhoneSignup) {
+      if (!targetState.supportsPhoneSignup) {
         return {
           code: 'phone_signup_panel_unsupported',
-          message: `当前来源 ${getIntegrationTargetLabel(capabilityState.activeFlowId, capabilityState.requestedIntegrationTargetId)} 不支持手机号注册。`,
+          message: `当前来源 ${getTargetLabel(capabilityState.activeFlowId, capabilityState.requestedTargetId)} 不支持手机号注册。`,
         };
       }
       if (!runtimeLocks.phoneVerificationEnabled) {
@@ -427,13 +425,13 @@
       const errors = [];
 
       if (
-        Array.isArray(capabilityState.supportedIntegrationTargets)
-        && capabilityState.supportedIntegrationTargets.length > 0
-        && capabilityState.canUseSelectedPanelMode === false
+        Array.isArray(capabilityState.supportedTargetIds)
+        && capabilityState.supportedTargetIds.length > 0
+        && capabilityState.canUseSelectedTarget === false
       ) {
         errors.push({
           code: 'panel_mode_unsupported',
-          message: `当前 flow 不支持 ${getIntegrationTargetLabel(capabilityState.activeFlowId, capabilityState.requestedIntegrationTargetId)} 来源。`,
+          message: `当前 flow 不支持 ${getTargetLabel(capabilityState.activeFlowId, capabilityState.requestedTargetId)} 来源。`,
         });
       }
 
@@ -481,18 +479,17 @@
       const shouldReconcileSignupMethod = MODE_SWITCH_RELEVANT_KEYS.some((key) => changedKeySet.has(key));
 
       if (
-        (changedKeySet.has('panelMode') || changedKeySet.has('openaiIntegrationTargetId') || changedKeySet.has('kiroIntegrationTargetId'))
-        && Array.isArray(capabilityState.supportedIntegrationTargets)
-        && capabilityState.supportedIntegrationTargets.length > 0
-        && capabilityState.canUseSelectedPanelMode === false
+        (changedKeySet.has('panelMode') || changedKeySet.has('openaiIntegrationTargetId') || changedKeySet.has('kiroTargetId'))
+        && Array.isArray(capabilityState.supportedTargetIds)
+        && capabilityState.supportedTargetIds.length > 0
+        && capabilityState.canUseSelectedTarget === false
       ) {
-        normalizedUpdates.panelMode = capabilityState.effectiveIntegrationTargetId;
-        normalizedUpdates.openaiIntegrationTargetId = capabilityState.effectiveIntegrationTargetId;
-        normalizedUpdates.kiroIntegrationTargetId = capabilityState.effectiveIntegrationTargetId;
-        normalizedUpdates.kiroSourceId = capabilityState.effectiveIntegrationTargetId;
+        normalizedUpdates.panelMode = capabilityState.effectiveTargetId;
+        normalizedUpdates.openaiIntegrationTargetId = capabilityState.effectiveTargetId;
+        normalizedUpdates.kiroTargetId = capabilityState.effectiveTargetId;
         errors.push({
           code: 'panel_mode_unsupported',
-          message: `当前 flow 不支持 ${getIntegrationTargetLabel(capabilityState.activeFlowId, capabilityState.requestedIntegrationTargetId)} 来源。`,
+          message: `当前 flow 不支持 ${getTargetLabel(capabilityState.activeFlowId, capabilityState.requestedTargetId)} 来源。`,
         });
       }
 
@@ -556,9 +553,9 @@
     return {
       canUsePhoneSignup,
       getFlowCapabilities,
-      getOpenAiIntegrationTargetCapabilities,
+      getOpenAiTargetCapabilities,
       normalizeFlowId,
-      normalizeOpenAiIntegrationTargetId,
+      normalizeOpenAiTargetId,
       normalizeSignupMethod,
       resolveSidepanelCapabilities,
       resolveSignupMethod,
@@ -571,15 +568,15 @@
     createFlowCapabilityRegistry,
     DEFAULT_FLOW_CAPABILITIES,
     DEFAULT_FLOW_ID,
-    DEFAULT_INTEGRATION_TARGET_CAPABILITIES,
-    DEFAULT_OPENAI_INTEGRATION_TARGET_ID,
+    DEFAULT_TARGET_CAPABILITIES,
+    DEFAULT_OPENAI_TARGET_ID,
     FLOW_CAPABILITIES,
-    OPENAI_INTEGRATION_TARGET_CAPABILITIES,
+    OPENAI_TARGET_CAPABILITIES,
     SIGNUP_METHOD_EMAIL,
     SIGNUP_METHOD_PHONE,
-    VALID_OPENAI_INTEGRATION_TARGET_IDS,
+    VALID_OPENAI_TARGET_IDS,
     normalizeFlowId,
-    normalizeOpenAiIntegrationTargetId,
+    normalizeOpenAiTargetId,
     normalizeSignupMethod,
   };
 });

@@ -9,12 +9,14 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
 
   const executedNodeIds = [];
   const kiroNodeIds = [
-    'kiro-start-device-login',
+    'kiro-open-register-page',
     'kiro-submit-email',
     'kiro-submit-name',
     'kiro-submit-verification-code',
-    'kiro-fill-password',
-    'kiro-confirm-access',
+    'kiro-submit-password',
+    'kiro-complete-register-consent',
+    'kiro-start-desktop-authorize',
+    'kiro-complete-desktop-authorize',
     'kiro-upload-credential',
   ];
   const openAiNodeIds = ['open-chatgpt', 'submit-signup-email', 'fill-password'];
@@ -24,10 +26,9 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
     activeFlowId: 'kiro',
     flowId: 'kiro',
     panelMode: 'cpa',
-    kiroSourceId: 'kiro-rs',
+    kiroTargetId: 'kiro-rs',
     kiroRsUrl: 'https://kiro.example/admin',
     kiroRsKey: 'demo-key',
-    kiroRsApiRegion: 'ap-east-1',
     customFutureFlowField: 'future-ready',
     plusModeEnabled: false,
     plusPaymentMethod: 'paypal',
@@ -41,16 +42,18 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
     signupMethod: 'email',
     stepExecutionRangeByFlow: {
       openai: { enabled: false, fromStep: 1, toStep: 11 },
-      kiro: { enabled: false, fromStep: 1, toStep: 7 },
+      kiro: { enabled: false, fromStep: 1, toStep: 9 },
     },
     nodeStatuses: {
       'open-chatgpt': 'stopped',
-      'kiro-start-device-login': 'pending',
+      'kiro-open-register-page': 'pending',
       'kiro-submit-email': 'pending',
       'kiro-submit-name': 'pending',
       'kiro-submit-verification-code': 'pending',
-      'kiro-fill-password': 'pending',
-      'kiro-confirm-access': 'pending',
+      'kiro-submit-password': 'pending',
+      'kiro-complete-register-consent': 'pending',
+      'kiro-start-desktop-authorize': 'pending',
+      'kiro-complete-desktop-authorize': 'pending',
       'kiro-upload-credential': 'pending',
     },
     tabRegistry: {
@@ -113,10 +116,9 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
         activeFlowId: prevState.activeFlowId,
         flowId: prevState.activeFlowId,
         panelMode: prevState.panelMode,
-        kiroSourceId: prevState.kiroSourceId,
+        kiroTargetId: prevState.kiroTargetId,
         kiroRsUrl: prevState.kiroRsUrl,
         kiroRsKey: prevState.kiroRsKey,
-        kiroRsApiRegion: prevState.kiroRsApiRegion,
         customFutureFlowField: prevState.customFutureFlowField,
       };
     },
@@ -167,10 +169,9 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
         activeFlowId: 'openai',
         flowId: 'openai',
         panelMode: 'cpa',
-        kiroSourceId: '',
+        kiroTargetId: '',
         kiroRsUrl: '',
         kiroRsKey: '',
-        kiroRsApiRegion: '',
         customFutureFlowField: '',
         plusModeEnabled: false,
         plusPaymentMethod: 'paypal',
@@ -184,7 +185,7 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
         signupMethod: 'email',
         stepExecutionRangeByFlow: {
           openai: { enabled: false, fromStep: 1, toStep: 11 },
-          kiro: { enabled: false, fromStep: 1, toStep: 7 },
+          kiro: { enabled: false, fromStep: 1, toStep: 9 },
         },
         nodeStatuses: {},
         tabRegistry: {},
@@ -195,18 +196,19 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
       executedNodeIds.push(nodeId);
       assert.equal(currentState.activeFlowId, 'kiro');
       assert.equal(currentState.flowId, 'kiro');
-      assert.equal(currentState.kiroSourceId, 'kiro-rs');
-      assert.equal(currentState.kiroRsApiRegion, 'ap-east-1');
+      assert.equal(currentState.kiroTargetId, 'kiro-rs');
       assert.equal(currentState.customFutureFlowField, 'future-ready');
       currentState = {
         ...currentState,
         nodeStatuses: {
-          'kiro-start-device-login': 'completed',
+          'kiro-open-register-page': 'completed',
           'kiro-submit-email': 'completed',
           'kiro-submit-name': 'completed',
           'kiro-submit-verification-code': 'completed',
-          'kiro-fill-password': 'completed',
-          'kiro-confirm-access': 'completed',
+          'kiro-submit-password': 'completed',
+          'kiro-complete-register-consent': 'completed',
+          'kiro-start-desktop-authorize': 'completed',
+          'kiro-complete-desktop-authorize': 'completed',
           'kiro-upload-credential': 'completed',
         },
       };
@@ -239,6 +241,6 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
 
   await controller.autoRunLoop(1, { autoRunSkipFailures: false, mode: 'restart' });
 
-  assert.deepStrictEqual(executedNodeIds, ['kiro-start-device-login']);
+  assert.deepStrictEqual(executedNodeIds, ['kiro-open-register-page']);
   assert.equal(helperCalls, 1);
 });

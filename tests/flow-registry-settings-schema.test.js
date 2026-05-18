@@ -13,15 +13,15 @@ function loadApis() {
   };`)(scope);
 }
 
-test('flow registry exposes canonical flow and integration target metadata', () => {
+test('flow registry exposes canonical flow and target metadata', () => {
   const { flowRegistry } = loadApis();
 
   assert.deepEqual(flowRegistry.getRegisteredFlowIds(), ['openai', 'kiro']);
   assert.equal(flowRegistry.normalizeFlowId('kiro'), 'kiro');
   assert.equal(flowRegistry.normalizeFlowId('unknown'), 'openai');
   assert.equal(flowRegistry.getFlowLabel('openai'), 'Codex / OpenAI');
-  assert.equal(flowRegistry.normalizeIntegrationTargetId('openai', 'sub2api'), 'sub2api');
-  assert.equal(flowRegistry.normalizeIntegrationTargetId('kiro', 'anything-else'), 'kiro-rs');
+  assert.equal(flowRegistry.normalizeTargetId('openai', 'sub2api'), 'sub2api');
+  assert.equal(flowRegistry.normalizeTargetId('kiro', 'anything-else'), 'kiro-rs');
   assert.deepEqual(
     flowRegistry.getVisibleGroupIds('openai', 'cpa'),
     ['openai-plus', 'openai-phone', 'openai-oauth', 'openai-step6', 'openai-target-cpa', 'service-account', 'service-email', 'service-proxy']
@@ -31,7 +31,7 @@ test('flow registry exposes canonical flow and integration target metadata', () 
     ['kiro-runtime-status', 'kiro-target-kiro-rs', 'service-account', 'service-email', 'service-proxy']
   );
   assert.deepEqual(
-    flowRegistry.getIntegrationTargetOptions('openai').map((entry) => entry.id),
+    flowRegistry.getTargetOptions('openai').map((entry) => entry.id),
     ['cpa', 'sub2api', 'codex2api']
   );
   assert.equal(flowRegistry.getPublicationTargetDefinition('kiro', 'kiro-rs')?.label, 'kiro.rs');
@@ -52,7 +52,7 @@ test('settings schema normalizes view input into canonical nested namespaces', (
     kiroRsKey: 'secret-key',
     stepExecutionRangeByFlow: {
       openai: { enabled: true, fromStep: 2, toStep: 9 },
-      kiro: { enabled: true, fromStep: 1, toStep: 7 },
+      kiro: { enabled: true, fromStep: 1, toStep: 9 },
     },
   });
 
@@ -61,13 +61,13 @@ test('settings schema normalizes view input into canonical nested namespaces', (
   assert.equal(normalized.services.proxy.enabled, true);
   assert.equal(normalized.services.account.customPassword, 'SharedSecret123!');
   assert.equal(normalized.flows.openai.integrationTargetId, 'sub2api');
-  assert.equal(normalized.flows.kiro.integrationTargetId, 'kiro-rs');
-  assert.equal(normalized.flows.kiro.integrationTargets['kiro-rs'].baseUrl, 'https://kiro.example.com/admin');
-  assert.equal(normalized.flows.kiro.integrationTargets['kiro-rs'].apiKey, 'secret-key');
+  assert.equal(normalized.flows.kiro.targetId, 'kiro-rs');
+  assert.equal(normalized.flows.kiro.targets['kiro-rs'].baseUrl, 'https://kiro.example.com/admin');
+  assert.equal(normalized.flows.kiro.targets['kiro-rs'].apiKey, 'secret-key');
   assert.deepEqual(normalized.flows.kiro.autoRun.stepExecutionRange, {
     enabled: true,
     fromStep: 1,
-    toStep: 7,
+    toStep: 9,
   });
 });
 
@@ -76,7 +76,7 @@ test('settings schema can project canonical state into a read view without legac
   const schema = settingsSchema.createSettingsSchema();
   const normalized = schema.normalizeSettingsState({
     activeFlowId: 'kiro',
-    kiroIntegrationTargetId: 'kiro-rs',
+    kiroTargetId: 'kiro-rs',
     kiroRsUrl: 'https://kiro.example.com/admin',
     kiroRsKey: 'key-123',
   });
@@ -84,9 +84,8 @@ test('settings schema can project canonical state into a read view without legac
 
   assert.equal(view.activeFlowId, 'kiro');
   assert.equal(view.openaiIntegrationTargetId, 'cpa');
-  assert.equal(view.kiroIntegrationTargetId, 'kiro-rs');
+  assert.equal(view.kiroTargetId, 'kiro-rs');
   assert.equal(view.panelMode, 'cpa');
-  assert.equal(view.kiroSourceId, 'kiro-rs');
   assert.equal(view.kiroRsUrl, 'https://kiro.example.com/admin');
   assert.equal(view.kiroRsKey, 'key-123');
   assert.equal(view.settingsSchemaVersion, 4);
