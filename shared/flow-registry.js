@@ -199,7 +199,7 @@
     },
     kiro: {
       id: 'kiro',
-      label: 'kiro（暂时无法使用，会立刻封号）',
+      label: 'Kiro',
       services: ['account', 'email', 'proxy'],
       capabilities: {
         ...DEFAULT_FLOW_CAPABILITIES,
