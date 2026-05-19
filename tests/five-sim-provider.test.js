@@ -112,6 +112,7 @@ test('5sim provider buys, checks, finishes, cancels, bans, and keeps original ac
   assert.equal(activation.countryId, 'vietnam');
   assert.equal(code, '112233');
   assert.equal(reused.activationId, '1001');
+  assert.deepStrictEqual(reused.ignoredPhoneCodeKeys, ['code 112233']);
   const buy = requests.find((entry) => entry.url.pathname.includes('/buy/activation'));
   assert.equal(buy.url.searchParams.get('maxPrice'), '12');
   assert.equal(buy.url.searchParams.get('reuse'), '1');
@@ -125,6 +126,7 @@ test('5sim provider buys, checks, finishes, cancels, bans, and keeps original ac
       '/v1/user/finish/1001',
       '/v1/user/cancel/1001',
       '/v1/user/ban/1001',
+      '/v1/user/check/1001',
     ]
   );
 });

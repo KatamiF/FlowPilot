@@ -2880,6 +2880,18 @@ test('phone verification helper reuses 5sim by keeping the original activation',
     fetchImpl: async (url) => {
       const parsedUrl = new URL(url);
       requests.push(parsedUrl.pathname);
+      if (parsedUrl.pathname === '/v1/user/check/600001') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            id: '600001',
+            phone: '+44 7911-123-456',
+            status: 'RECEIVED',
+            sms: [{ id: 'old', code: '111111' }],
+          }),
+        };
+      }
       throw new Error(`Unexpected 5sim request: ${parsedUrl.pathname}`);
     },
     getState: async () => ({
@@ -2925,8 +2937,9 @@ test('phone verification helper reuses 5sim by keeping the original activation',
     successfulUses: 0,
     maxUses: 1,
     source: '5sim-retained-reuse',
+    ignoredPhoneCodeKeys: ['old::111111'],
   });
-  assert.deepStrictEqual(requests, []);
+  assert.deepStrictEqual(requests, ['/v1/user/check/600001']);
 });
 
 test('phone verification helper acquires a number from NexSMS with ordered fallback countries', async () => {
@@ -6090,6 +6103,7 @@ test('phone verification helper preserves newly saved free-reuse activation afte
 
 test('phone verification helper auto free-reuses 5sim by polling the retained order without reuse or finish', async () => {
   const requests = [];
+  let checkCount = 0;
   let currentState = {
     phoneSmsProvider: '5sim',
     fiveSimApiKey: 'demo-key',
@@ -6101,7 +6115,7 @@ test('phone verification helper auto free-reuses 5sim by polling the retained or
     phoneCodeWaitSeconds: 60,
     phoneCodeTimeoutWindows: 1,
     phoneCodePollIntervalSeconds: 1,
-    phoneCodePollMaxRounds: 1,
+    phoneCodePollMaxRounds: 2,
     currentPhoneActivation: null,
     reusablePhoneActivation: null,
     freeReusablePhoneActivation: {
@@ -6114,6 +6128,8 @@ test('phone verification helper auto free-reuses 5sim by polling the retained or
       successfulUses: 1,
       maxUses: 3,
       source: 'free-manual-reuse',
+      phoneCodeReceived: true,
+      phoneCodeReceivedAt: 1716000000000,
     },
   };
 
@@ -6127,6 +6143,7 @@ test('phone verification helper auto free-reuses 5sim by polling the retained or
       const parsedUrl = new URL(url);
       requests.push(parsedUrl);
       if (parsedUrl.pathname === '/v1/user/check/five-free-1') {
+        checkCount += 1;
         return {
           ok: true,
           status: 200,
@@ -6134,7 +6151,9 @@ test('phone verification helper auto free-reuses 5sim by polling the retained or
             id: 'five-free-1',
             phone: '+84901122334',
             status: 'RECEIVED',
-            sms: [{ code: '334455' }],
+            sms: checkCount === 1
+              ? [{ id: 'old', code: '111111' }]
+              : [{ id: 'old', code: '111111' }, { id: 'new', code: '334455' }],
           }),
         };
       }
@@ -6177,8 +6196,9 @@ test('phone verification helper auto free-reuses 5sim by polling the retained or
   assert.equal(currentState.freeReusablePhoneActivation.provider, '5sim');
   assert.equal(currentState.freeReusablePhoneActivation.activationId, 'five-free-1');
   assert.equal(currentState.freeReusablePhoneActivation.successfulUses, 2);
+  assert.equal(Object.prototype.hasOwnProperty.call(currentState.freeReusablePhoneActivation, 'phoneCodeReceived'), false);
   assert.equal(currentState.reusablePhoneActivation, null);
-  assert.deepStrictEqual(requests.map((url) => url.pathname), ['/v1/user/check/five-free-1']);
+  assert.deepStrictEqual(requests.map((url) => url.pathname), ['/v1/user/check/five-free-1', '/v1/user/check/five-free-1']);
 });
 
 test('phone verification helper retires failed 5sim free-reuse record instead of retrying stale order', async () => {
@@ -6207,6 +6227,8 @@ test('phone verification helper retires failed 5sim free-reuse record instead of
       successfulUses: 1,
       maxUses: 3,
       source: 'free-manual-reuse',
+      phoneCodeReceived: true,
+      phoneCodeReceivedAt: 1716000000000,
     },
   };
 
@@ -6227,7 +6249,7 @@ test('phone verification helper retires failed 5sim free-reuse record instead of
             id: 'five-free-stale',
             phone: '+84901122999',
             status: 'FINISHED',
-            sms: [],
+            sms: [{ id: 'old', code: '111111' }],
           }),
         };
       }
@@ -6259,7 +6281,7 @@ test('phone verification helper retires failed 5sim free-reuse record instead of
   );
 
   assert.equal(currentState.freeReusablePhoneActivation, null);
-  assert.deepStrictEqual(requests.map((url) => url.pathname), ['/v1/user/check/five-free-stale']);
+  assert.deepStrictEqual(requests.map((url) => url.pathname), ['/v1/user/check/five-free-stale', '/v1/user/check/five-free-stale']);
 });
 
 test('phone verification helper replaces number immediately when resend is throttled and does not spam resend clicks', async () => {
@@ -8484,6 +8506,7 @@ test('phone verification helper routes 5sim buy, check, and finish by current ac
 
 test('phone verification helper keeps 5sim reusable activation on the original order', async () => {
   const requests = [];
+  let checkCount = 0;
   let currentState = {
     phoneSmsProvider: '5sim',
     fiveSimApiKey: 'demo-key',
@@ -8495,7 +8518,7 @@ test('phone verification helper keeps 5sim reusable activation on the original o
     phoneCodeWaitSeconds: 60,
     phoneCodeTimeoutWindows: 1,
     phoneCodePollIntervalSeconds: 1,
-    phoneCodePollMaxRounds: 1,
+    phoneCodePollMaxRounds: 2,
     currentPhoneActivation: null,
     reusablePhoneActivation: {
       activationId: '4001',
@@ -8519,7 +8542,19 @@ test('phone verification helper keeps 5sim reusable activation on the original o
       const parsedUrl = new URL(url);
       requests.push(parsedUrl);
       if (parsedUrl.pathname === '/v1/user/check/4001') {
-        return { ok: true, status: 200, text: async () => JSON.stringify({ id: 4001, phone: '+84901122334', status: 'RECEIVED', sms: [{ code: '654321' }] }) };
+        checkCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            id: 4001,
+            phone: '+84901122334',
+            status: 'RECEIVED',
+            sms: checkCount === 1
+              ? [{ id: 'old', code: '111111' }]
+              : [{ id: 'old', code: '111111' }, { id: 'new', code: '654321' }],
+          }),
+        };
       }
       if (parsedUrl.pathname.includes('/reuse/') || parsedUrl.pathname.includes('/finish/')) {
         throw new Error(`5sim free reuse should not call terminal/reuse endpoint: ${parsedUrl.pathname}`);
@@ -8533,6 +8568,7 @@ test('phone verification helper keeps 5sim reusable activation on the original o
         return { phoneVerificationPage: true, url: 'https://auth.openai.com/phone-verification' };
       }
       if (message.type === 'SUBMIT_PHONE_VERIFICATION_CODE') {
+        assert.equal(message.payload.code, '654321');
         return { success: true, consentReady: true, url: 'https://auth.openai.com/authorize' };
       }
       throw new Error(`Unexpected content-script message: ${message.type}`);
@@ -8560,6 +8596,7 @@ test('phone verification helper keeps 5sim reusable activation on the original o
   assert.deepStrictEqual(
     requests.map((url) => url.pathname),
     [
+      '/v1/user/check/4001',
       '/v1/user/check/4001',
     ]
   );

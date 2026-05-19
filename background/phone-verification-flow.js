@@ -317,6 +317,36 @@
       return Math.max(0, Math.floor(Number(value) || 0));
     }
 
+    function normalizeStringList(value = []) {
+      const source = Array.isArray(value) ? value : [];
+      const seen = new Set();
+      const normalized = [];
+      source.forEach((entry) => {
+        const text = String(entry || '').trim();
+        if (!text || seen.has(text)) {
+          return;
+        }
+        seen.add(text);
+        normalized.push(text);
+      });
+      return normalized;
+    }
+
+    function buildPhoneSmsCodeKey(message = {}) {
+      return [
+        message.id ?? message.ID ?? '',
+        message.created_at ?? message.date ?? '',
+        message.code ?? '',
+        message.text ?? '',
+        message.message ?? '',
+      ].map((part) => String(part || '').trim()).filter(Boolean).join('::');
+    }
+
+    function collectPhoneSmsCodeKeys(payload) {
+      const smsList = Array.isArray(payload?.sms) ? payload.sms : [];
+      return normalizeStringList(smsList.map((message) => buildPhoneSmsCodeKey(message)).filter(Boolean));
+    }
+
     function normalizePhoneDigits(value) {
       return String(value || '').replace(/\D+/g, '');
     }
@@ -1322,6 +1352,7 @@
             ? normalizeNexSmsCountryId(rawCountryId, 0)
             : normalizeCountryId(rawCountryId, fallbackCountryId)
         );
+      const ignoredPhoneCodeKeys = normalizeStringList(record.ignoredPhoneCodeKeys);
       return {
         activationId,
         phoneNumber,
@@ -1337,6 +1368,7 @@
         ...(record.source ? { source: String(record.source || '').trim() } : {}),
         ...(record.phoneCodeReceived ? { phoneCodeReceived: true } : {}),
         ...(record.phoneCodeReceivedAt ? { phoneCodeReceivedAt: Math.max(0, Number(record.phoneCodeReceivedAt) || 0) } : {}),
+        ...(ignoredPhoneCodeKeys.length ? { ignoredPhoneCodeKeys } : {}),
       };
     }
 
@@ -1382,12 +1414,16 @@
         return null;
       }
       const recordedAt = Math.max(0, Number(record?.recordedAt) || 0);
-      return {
+      const reusableActivation = {
         ...normalized,
         provider: normalized.provider,
         source: 'free-manual-reuse',
         ...(recordedAt ? { recordedAt } : {}),
       };
+      delete reusableActivation.phoneCodeReceived;
+      delete reusableActivation.phoneCodeReceivedAt;
+      delete reusableActivation.ignoredPhoneCodeKeys;
+      return reusableActivation;
     }
 
     function markActivationPhoneCodeReceived(activation) {
@@ -3901,9 +3937,15 @@
 
       const config = resolvePhoneConfig(state);
       if (config.provider === PHONE_SMS_PROVIDER_5SIM) {
+        const payload = await fetchFiveSimPayload(
+          config,
+          `/user/check/${encodeURIComponent(normalizedActivation.activationId)}`,
+          '5sim reuse activation baseline'
+        );
         return {
           ...normalizedActivation,
           source: '5sim-retained-reuse',
+          ignoredPhoneCodeKeys: collectPhoneSmsCodeKeys(payload),
         };
       }
       if (config.provider === PHONE_SMS_PROVIDER_NEXSMS) {
@@ -4157,6 +4199,26 @@
         };
       }
       if (normalizedActivation.provider === PHONE_SMS_PROVIDER_5SIM) {
+        const provider = getFiveSimProviderForState(state);
+        if (provider) {
+          let retainedActivation = null;
+          try {
+            retainedActivation = await provider.reuseActivation(state, normalizedActivation);
+          } catch (error) {
+            return {
+              ok: false,
+              reason: 'five_sim_reuse_check_failed',
+              message: error.message || '5sim 复用手机号基线检查失败。',
+            };
+          }
+          return {
+            ok: true,
+            activation: {
+              ...retainedActivation,
+              source: 'free-auto-reuse',
+            },
+          };
+        }
         return {
           ok: true,
           activation: {
@@ -4337,10 +4399,20 @@
           pollCount += 1;
 
           const smsList = Array.isArray(payload?.sms) ? payload.sms : [];
+          const ignoredPhoneCodeKeys = new Set(normalizeStringList(normalizedActivation.ignoredPhoneCodeKeys));
           const directCode = extractVerificationCode(payload?.code || payload?.sms_code);
-          const smsCode = directCode || smsList
-            .map((smsItem) => extractVerificationCode(smsItem?.code || smsItem?.text || smsItem?.message || ''))
-            .find(Boolean);
+          let smsCode = '';
+          for (let index = smsList.length - 1; index >= 0; index -= 1) {
+            const smsItem = smsList[index] || {};
+            if (ignoredPhoneCodeKeys.has(buildPhoneSmsCodeKey(smsItem))) {
+              continue;
+            }
+            smsCode = extractVerificationCode(smsItem?.code || smsItem?.text || smsItem?.message || '');
+            if (smsCode) {
+              break;
+            }
+          }
+          smsCode = directCode || smsCode;
           if (smsCode) {
             return smsCode;
           }
@@ -5295,6 +5367,7 @@
       };
       delete nextReusableActivation.phoneCodeReceived;
       delete nextReusableActivation.phoneCodeReceivedAt;
+      delete nextReusableActivation.ignoredPhoneCodeKeys;
       await upsertReusableActivationPool(nextReusableActivation, { state });
       if (!normalizePhoneSmsReuseEnabled(state)) {
         await clearReusableActivation();

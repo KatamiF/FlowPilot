@@ -229,6 +229,21 @@
     return price;
   }
 
+  function normalizeStringList(value = []) {
+    const source = Array.isArray(value) ? value : [];
+    const seen = new Set();
+    const normalized = [];
+    source.forEach((entry) => {
+      const text = String(entry || '').trim();
+      if (!text || seen.has(text)) {
+        return;
+      }
+      seen.add(text);
+      normalized.push(text);
+    });
+    return normalized;
+  }
+
   function buildSortedUniquePriceCandidates(values = []) {
     return Array.from(
       new Set(
@@ -549,6 +564,9 @@
       operator: normalizeFiveSimOperator(record.operator || fallback.operator),
       ...(record.price !== undefined ? { price: Number(record.price) } : {}),
       ...(record.status ? { status: String(record.status) } : {}),
+      ...(normalizeStringList(record.ignoredPhoneCodeKeys || fallback.ignoredPhoneCodeKeys).length
+        ? { ignoredPhoneCodeKeys: normalizeStringList(record.ignoredPhoneCodeKeys || fallback.ignoredPhoneCodeKeys) }
+        : {}),
     };
   }
 
@@ -748,9 +766,14 @@
     }
     // 5sim 的 /user/reuse 会按手机号重新创建付费订单，并不是保留原订单继续收短信。
     // 真正的复用应继续轮询原 activationId，避免产生新的订单。
+    const config = resolveConfig(state, deps);
+    const payload = await fetchJson(config, `/v1/user/check/${encodeURIComponent(normalizedActivation.activationId)}`, {
+      actionLabel: '5sim 复用手机号基线检查',
+    });
     return {
       ...normalizedActivation,
       source: '5sim-retained-reuse',
+      ignoredPhoneCodeKeys: collectSmsCodeKeys(payload),
     };
   }
 
@@ -793,10 +816,30 @@
     return digitMatch?.[1] || trimmed;
   }
 
-  function extractCodeFromOrder(payload) {
+  function buildSmsCodeKey(message = {}) {
+    const text = [
+      message.id ?? message.ID ?? '',
+      message.created_at ?? message.date ?? '',
+      message.code ?? '',
+      message.text ?? '',
+      message.message ?? '',
+    ].map((part) => String(part || '').trim()).filter(Boolean).join('::');
+    return text;
+  }
+
+  function collectSmsCodeKeys(payload) {
     const smsList = Array.isArray(payload?.sms) ? payload.sms : [];
+    return normalizeStringList(smsList.map((message) => buildSmsCodeKey(message)).filter(Boolean));
+  }
+
+  function extractCodeFromOrder(payload, ignoredPhoneCodeKeys = []) {
+    const smsList = Array.isArray(payload?.sms) ? payload.sms : [];
+    const ignoredKeys = new Set(normalizeStringList(ignoredPhoneCodeKeys));
     for (let index = smsList.length - 1; index >= 0; index -= 1) {
       const message = smsList[index] || {};
+      if (ignoredKeys.has(buildSmsCodeKey(message))) {
+        continue;
+      }
       const code = extractVerificationCode(message.code) || extractVerificationCode(message.text);
       if (code) {
         return code;
@@ -838,7 +881,7 @@
           timeoutMs,
         });
       }
-      const code = extractCodeFromOrder(payload);
+      const code = extractCodeFromOrder(payload, normalizedActivation.ignoredPhoneCodeKeys);
       if (code) {
         return code;
       }
