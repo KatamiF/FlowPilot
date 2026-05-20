@@ -1524,6 +1524,42 @@ function isBusySubscribeButton(button) {
     || /loading|processing|submitting|请稍候|处理中|加载中/i.test(text);
 }
 
+const SUBSCRIBE_READY_TEXT_PATTERN = /\u8ba2\u9605|\u7ee7\u7eed|\u786e\u8ba4|\u652f\u4ed8|subscribe|continue|confirm|pay|\u8d2d\u4e70\s*ChatGPT\s*Plus|start\s*subscription|place\s*order/i;
+const SUBSCRIBE_PROCESSING_TEXT_PATTERN = /\u6b63\u5728\u5904\u7406|\u5904\u7406\u4e2d|\u8bf7\u7a0d\u5019|\u52a0\u8f7d\u4e2d|loading|processing|submitting/i;
+
+function getSubscribeButtonState(button) {
+  if (!button) {
+    return {
+      found: false,
+      enabled: false,
+      busy: false,
+      ready: false,
+      status: 'missing',
+      text: '',
+    };
+  }
+  const text = normalizeText([
+    button.innerText,
+    button.textContent,
+    button.value,
+    button.getAttribute?.('aria-label'),
+  ].filter(Boolean).join(' ')) || getActionText(button);
+  const searchText = getCombinedSearchText(button);
+  const combinedText = normalizeText(`${text} ${searchText}`);
+  const enabled = isEnabledControl(button);
+  const busy = Boolean(isBusySubscribeButton(button) || SUBSCRIBE_PROCESSING_TEXT_PATTERN.test(combinedText));
+  const readyText = SUBSCRIBE_READY_TEXT_PATTERN.test(combinedText);
+  const ready = Boolean(enabled && readyText && !busy);
+  return {
+    found: true,
+    enabled,
+    busy,
+    ready,
+    status: busy ? 'processing' : (!enabled ? 'disabled' : (readyText ? 'ready' : 'unknown')),
+    text: text || searchText,
+  };
+}
+
 function getAssociatedForm(button) {
   if (!button) return null;
   if (button.form) return button.form;
@@ -1710,12 +1746,23 @@ async function clickPlusSubscribe(payload = {}) {
 
   const subscribeButton = await waitUntil(() => {
     const button = findSubscribeButton();
-    return button && isEnabledControl(button) && !isBusySubscribeButton(button) ? button : null;
+    return button || null;
   }, {
     label: '订阅按钮',
     intervalMs: 250,
     timeoutMs: 10000,
   });
+  const buttonState = getSubscribeButtonState(subscribeButton);
+  if (!buttonState.ready) {
+    log(`订阅按钮当前状态 [${buttonState.status}] "${buttonState.text.slice(0, 40)}"，本轮不点击`);
+    return {
+      clicked: false,
+      subscribeButtonBusy: buttonState.busy,
+      subscribeButtonEnabled: buttonState.enabled,
+      subscribeButtonStatus: buttonState.status,
+      subscribeButtonText: buttonState.text,
+    };
+  }
 
   await sleep(Math.max(0, Math.floor(Number(payload.beforeClickDelayMs) || 0)));
   await performOperationWithDelay({ stepKey: 'plus-checkout-billing', kind: 'submit', label: 'click-subscribe' }, async () => {
@@ -1723,6 +1770,8 @@ async function clickPlusSubscribe(payload = {}) {
   });
   return {
     clicked: true,
+    subscribeButtonStatus: 'clicked',
+    subscribeButtonText: buttonState.text,
   };
 }
 
@@ -1739,6 +1788,7 @@ async function readChatGptSessionAccessToken() {
 
 async function inspectPlusCheckoutState(options = {}) {
   const structuredAddress = getStructuredAddressFields();
+  const subscribeButtonState = getSubscribeButtonState(findSubscribeButton());
   const state = {
     url: location.href,
     readyState: document.readyState,
@@ -1750,7 +1800,11 @@ async function inspectPlusCheckoutState(options = {}) {
     paymentTextPreview: getPaymentTextPreview(),
     cardFieldsVisible: hasCreditCardFields(),
     billingFieldsVisible: hasBillingAddressFields(),
-    hasSubscribeButton: Boolean(findSubscribeButton()),
+    hasSubscribeButton: subscribeButtonState.found,
+    subscribeButtonBusy: subscribeButtonState.busy,
+    subscribeButtonEnabled: subscribeButtonState.enabled,
+    subscribeButtonStatus: subscribeButtonState.status,
+    subscribeButtonText: subscribeButtonState.text,
     hostedOpenAiPage: isPayPalHostedOpenAiCheckoutPage(),
     hostedVerificationVisible: hasHostedOpenAiVerificationDialog(),
     hostedPayPalButtonFound: Boolean(findHostedPayPalButton()),

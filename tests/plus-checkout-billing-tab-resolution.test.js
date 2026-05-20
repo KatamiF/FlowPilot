@@ -84,6 +84,7 @@ function createExecutorHarness({
   getState = null,
   queryTabsInAutomationWindow = null,
   markCurrentRegistrationAccountUsed = async () => {},
+  onClickSubscribe = null,
   probeIpProxyExit = null,
   onSetState = null,
   sleepWithStop = null,
@@ -137,7 +138,14 @@ function createExecutorHarness({
             return stateByFrame[frameId] || { hasPayPal: false, paypalCandidates: [] };
           }
           if (message.type === 'PLUS_CHECKOUT_CLICK_SUBSCRIBE') {
-            checkoutTab.url = submitRedirectUrl;
+            if (typeof onClickSubscribe === 'function') {
+              const clickResult = await onClickSubscribe({ checkoutTab, events, frameId, message, tabId });
+              if (clickResult !== undefined) {
+                return clickResult;
+              }
+            } else {
+              checkoutTab.url = submitRedirectUrl;
+            }
           }
           return createSuccessfulBillingResult();
         },
@@ -240,6 +248,57 @@ test('Plus checkout billing uses the current checkout tab when step 6 did not re
   assert.equal(events.completed[0].step, 'plus-checkout-billing');
   assert.equal(events.states.some((updates) => updates.plusCheckoutTabId === checkoutTab.id), true);
   assert.equal(events.logs.some((entry) => /当前已在 Plus Checkout 页面/.test(entry.message)), true);
+});
+
+test('Plus checkout billing waits on processing subscribe text before clicking a ready subscribe button again', async () => {
+  const originalNow = Date.now;
+  let now = 0;
+  let clickCalls = 0;
+  Date.now = () => now;
+  try {
+    const { events, executor } = createExecutorHarness({
+      frames: [{ frameId: 0, url: 'https://chatgpt.com/checkout/openai_ie/cs_test' }],
+      stateByFrame: {
+        0: {
+          hasPayPal: true,
+          paypalCandidates: [{ tag: 'button', text: 'PayPal' }],
+          billingFieldsVisible: true,
+          hasSubscribeButton: true,
+        },
+      },
+      onClickSubscribe: async ({ checkoutTab }) => {
+        clickCalls += 1;
+        if (clickCalls === 1) {
+          return {
+            clicked: false,
+            subscribeButtonStatus: 'processing',
+            subscribeButtonText: '订阅正在处理',
+          };
+        }
+        checkoutTab.url = 'https://www.paypal.com/checkoutnow';
+        return {
+          clicked: true,
+          subscribeButtonStatus: 'clicked',
+          subscribeButtonText: '订阅',
+        };
+      },
+      sleepWithStop: async (ms) => {
+        events.sleeps.push(ms);
+        now += ms;
+      },
+    });
+
+    await executor.executePlusCheckoutBilling({});
+
+    const subscribeMessages = events.messages.filter((entry) => entry.message.type === 'PLUS_CHECKOUT_CLICK_SUBSCRIBE');
+    assert.equal(subscribeMessages.length, 2);
+    assert.equal(subscribeMessages.some((entry) => entry.message.payload.allowBusySubscribeButton !== undefined), false);
+    assert.equal(events.sleeps.filter((ms) => ms === 500).length >= 20, true);
+    assert.equal(events.logs.some((entry) => /本轮未点击/.test(entry.message)), true);
+    assert.equal(events.completed[0].step, 'plus-checkout-billing');
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test('Plus checkout billing searches checkout tabs inside the locked automation window', async () => {

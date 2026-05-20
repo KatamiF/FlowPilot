@@ -221,7 +221,6 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
       'fetch-signup-code',
       'fill-profile',
       'plus-checkout-create',
-      'paypal-hosted-openai-checkout',
       'paypal-hosted-email',
       'paypal-hosted-verification',
       'paypal-hosted-card',
@@ -236,10 +235,10 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
   assert.equal(hostedSteps.some((step) => step.key === 'plus-checkout-billing'), false);
   assert.equal(hostedSteps.some((step) => step.key === 'paypal-approve'), false);
   assert.equal(hostedSteps.some((step) => step.key === 'plus-checkout-return'), false);
-  assert.equal(hostedSteps.find((step) => step.key === 'paypal-hosted-openai-checkout')?.title, '无卡直绑提交 OpenAI Checkout');
+  assert.equal(hostedSteps.some((step) => step.key === 'paypal-hosted-openai-checkout'), false);
   assert.equal(hostedSteps.find((step) => step.key === 'paypal-hosted-card')?.title, '无卡直绑填写 PayPal 资料');
-  assert.deepStrictEqual(api.getStepIds({ plusModeEnabled: true, plusPaymentMethod: 'paypal-hosted' }), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
-  assert.equal(api.getLastStepId({ plusModeEnabled: true, plusPaymentMethod: 'paypal-hosted' }), 16);
+  assert.deepStrictEqual(api.getStepIds({ plusModeEnabled: true, plusPaymentMethod: 'paypal-hosted' }), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+  assert.equal(api.getLastStepId({ plusModeEnabled: true, plusPaymentMethod: 'paypal-hosted' }), 15);
 
   assert.deepStrictEqual(
     goPaySteps.map((step) => step.key),
@@ -317,7 +316,7 @@ test('Plus session strategy swaps the OAuth tail for a single SUB2API import nod
         plusAccountAccessStrategy: 'sub2api_codex_session',
       },
       previousNodeId: 'paypal-hosted-review',
-      expectedStepIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      expectedStepIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     },
     {
       label: 'gopay',
@@ -408,7 +407,7 @@ test('Plus session strategy swaps the OAuth tail for a single CPA import node', 
         plusAccountAccessStrategy: 'cpa_codex_session',
       },
       previousNodeId: 'paypal-hosted-review',
-      expectedStepIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      expectedStepIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     },
     {
       label: 'gopay',

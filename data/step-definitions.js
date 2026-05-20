@@ -35,12 +35,11 @@
   ];
   const PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS = [
     ...PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS.slice(0, 6),
-    { id: 7, order: 70, key: 'paypal-hosted-openai-checkout', title: '无卡直绑提交 OpenAI Checkout', sourceId: 'plus-checkout', driverId: 'content/plus-checkout', command: 'paypal-hosted-openai-checkout' },
-    { id: 8, order: 80, key: 'paypal-hosted-email', title: '无卡直绑填写 PayPal 邮箱', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-email' },
-    { id: 9, order: 90, key: 'paypal-hosted-verification', title: '无卡直绑填写 PayPal 验证码', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-verification' },
-    { id: 10, order: 100, key: 'paypal-hosted-card', title: '无卡直绑填写 PayPal 资料', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-card' },
-    { id: 11, order: 110, key: 'paypal-hosted-create-account', title: '无卡直绑确认创建 PayPal', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-create-account' },
-    { id: 12, order: 120, key: 'paypal-hosted-review', title: '无卡直绑完成 PayPal 授权', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-review' },
+    { id: 7, order: 70, key: 'paypal-hosted-email', title: '无卡直绑填写 PayPal 邮箱', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-email' },
+    { id: 8, order: 80, key: 'paypal-hosted-verification', title: '无卡直绑填写 PayPal 验证码', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-verification' },
+    { id: 9, order: 90, key: 'paypal-hosted-card', title: '无卡直绑填写 PayPal 资料', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-card' },
+    { id: 10, order: 100, key: 'paypal-hosted-create-account', title: '无卡直绑确认创建 PayPal', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-create-account' },
+    { id: 11, order: 110, key: 'paypal-hosted-review', title: '无卡直绑完成 PayPal 授权', sourceId: 'paypal-flow', driverId: 'content/paypal-flow', command: 'paypal-hosted-review' },
   ];
 
   const PLUS_GOPAY_PREFIX_STEP_DEFINITIONS = [
@@ -240,23 +239,23 @@
   );
   const PLUS_PAYPAL_PHONE_STEP_DEFINITIONS = createOpenAiSteps(PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS, 10, 100, SIGNUP_METHOD_PHONE);
   const PLUS_PAYPAL_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = createOpenAiSteps(PLUS_PAYPAL_PREFIX_STEP_DEFINITIONS, 10, 100, SIGNUP_METHOD_PHONE, { phoneSignupReloginAfterBindEmailEnabled: true });
-  const PLUS_PAYPAL_HOSTED_CHECKOUT_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 13, 130, SIGNUP_METHOD_EMAIL);
+  const PLUS_PAYPAL_HOSTED_CHECKOUT_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 12, 120, SIGNUP_METHOD_EMAIL);
   const PLUS_PAYPAL_HOSTED_CHECKOUT_SUB2API_SESSION_STEP_DEFINITIONS = createHostedCheckoutSteps(
     PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS,
-    13,
-    130,
+    12,
+    120,
     SIGNUP_METHOD_EMAIL,
     { plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION }
   );
   const PLUS_PAYPAL_HOSTED_CHECKOUT_CPA_SESSION_STEP_DEFINITIONS = createHostedCheckoutSteps(
     PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS,
-    13,
-    130,
+    12,
+    120,
     SIGNUP_METHOD_EMAIL,
     { plusAccountAccessStrategy: PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION }
   );
-  const PLUS_PAYPAL_HOSTED_CHECKOUT_PHONE_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 13, 130, SIGNUP_METHOD_PHONE);
-  const PLUS_PAYPAL_HOSTED_CHECKOUT_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 13, 130, SIGNUP_METHOD_PHONE, { phoneSignupReloginAfterBindEmailEnabled: true });
+  const PLUS_PAYPAL_HOSTED_CHECKOUT_PHONE_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 12, 120, SIGNUP_METHOD_PHONE);
+  const PLUS_PAYPAL_HOSTED_CHECKOUT_PHONE_BOUND_EMAIL_RELOGIN_STEP_DEFINITIONS = createHostedCheckoutSteps(PLUS_PAYPAL_HOSTED_CHECKOUT_PREFIX_STEP_DEFINITIONS, 12, 120, SIGNUP_METHOD_PHONE, { phoneSignupReloginAfterBindEmailEnabled: true });
   const PLUS_GOPAY_STEP_DEFINITIONS = createOpenAiSteps(PLUS_GOPAY_PREFIX_STEP_DEFINITIONS, 10, 100, SIGNUP_METHOD_EMAIL);
   const PLUS_GOPAY_SUB2API_SESSION_STEP_DEFINITIONS = createOpenAiSteps(
     PLUS_GOPAY_PREFIX_STEP_DEFINITIONS,

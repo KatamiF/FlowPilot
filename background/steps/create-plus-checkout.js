@@ -35,12 +35,12 @@
   const PAYPAL_HOSTED_STEP_CREATE_ACCOUNT = 'paypal-hosted-create-account';
   const PAYPAL_HOSTED_STEP_REVIEW = 'paypal-hosted-review';
   const PAYPAL_HOSTED_STEP_META = Object.freeze({
-    [PAYPAL_HOSTED_STEP_OPENAI_CHECKOUT]: { step: 7, label: '无卡直绑 OpenAI Checkout' },
-    [PAYPAL_HOSTED_STEP_EMAIL]: { step: 8, label: '无卡直绑 PayPal 邮箱页' },
-    [PAYPAL_HOSTED_STEP_VERIFICATION]: { step: 9, label: '无卡直绑 PayPal 验证码页' },
-    [PAYPAL_HOSTED_STEP_CARD]: { step: 10, label: '无卡直绑 PayPal 资料页' },
-    [PAYPAL_HOSTED_STEP_CREATE_ACCOUNT]: { step: 11, label: '无卡直绑 PayPal 创建确认页' },
-    [PAYPAL_HOSTED_STEP_REVIEW]: { step: 12, label: '无卡直绑 PayPal 授权复核页' },
+    [PAYPAL_HOSTED_STEP_OPENAI_CHECKOUT]: { step: 6, label: '创建 PayPal 无卡直绑 Checkout' },
+    [PAYPAL_HOSTED_STEP_EMAIL]: { step: 7, label: '无卡直绑 PayPal 邮箱页' },
+    [PAYPAL_HOSTED_STEP_VERIFICATION]: { step: 8, label: '无卡直绑 PayPal 验证码页' },
+    [PAYPAL_HOSTED_STEP_CARD]: { step: 9, label: '无卡直绑 PayPal 资料页' },
+    [PAYPAL_HOSTED_STEP_CREATE_ACCOUNT]: { step: 10, label: '无卡直绑 PayPal 创建确认页' },
+    [PAYPAL_HOSTED_STEP_REVIEW]: { step: 11, label: '无卡直绑 PayPal 授权复核页' },
   });
 
   function createPlusCheckoutCreateExecutor(deps = {}) {
@@ -686,7 +686,7 @@
         throw new Error('步骤 6：PayPal 无卡直绑未返回可用的订阅链接。');
       }
 
-      await addLog('步骤 6：PayPal 无卡直绑链接已创建，正在打开 hosted checkout 页面...', 'ok');
+      await addLog('步骤 6：PayPal 无卡直绑链接已创建，正在打开并提交 OpenAI Checkout 页面...', 'ok');
       await chrome.tabs.update(tabId, { url: targetCheckoutUrl, active: true });
       await waitForTabCompleteUntilStopped(tabId);
 
@@ -697,26 +697,37 @@
         500
       );
       const landedUrl = String(landedTab?.url || targetCheckoutUrl || '').trim();
+      let completedUrl = landedUrl;
 
-      const isAlreadySuccessful = isHostedCheckoutSuccessUrl(landedUrl);
+      if (isHostedOpenAiCheckoutUrl(completedUrl)) {
+        const { profile, config } = await ensureHostedGuestProfile(state);
+        await addLog(`步骤 6：正在提交 OpenAI Checkout，等待跳转到 PayPal 邮箱页（电话使用本地号码 ${profile.phone}）。`, 'info');
+        completedUrl = String(await runHostedOpenAiCheckout(tabId, profile, config) || await getHostedCurrentUrl(tabId) || '').trim();
+      }
+
+      if (isPayPalUrl(completedUrl)) {
+        await waitForTabCompleteUntilStopped(tabId).catch(() => {});
+      }
+
+      const isAlreadySuccessful = isHostedCheckoutSuccessUrl(completedUrl);
       await setState({
         plusCheckoutTabId: tabId,
-        plusCheckoutUrl: landedUrl,
+        plusCheckoutUrl: completedUrl,
         plusCheckoutCountry: result.country || 'US',
         plusCheckoutCurrency: result.currency || 'USD',
         plusCheckoutSource: PLUS_PAYMENT_METHOD_PAYPAL_HOSTED,
-        plusReturnUrl: isAlreadySuccessful ? landedUrl : '',
+        plusReturnUrl: isAlreadySuccessful ? completedUrl : '',
         plusHostedCheckoutCompleted: isAlreadySuccessful,
       });
 
-      await addLog(`步骤 6：PayPal 无卡直绑页面已就绪（${result.country || 'US'} ${result.currency || 'USD'}），准备进入页面级直绑节点。`, 'info');
+      await addLog(`步骤 6：PayPal 无卡直绑已提交 OpenAI Checkout（${result.country || 'US'} ${result.currency || 'USD'}），准备进入 PayPal 邮箱页。`, 'info');
 
       await completeNodeFromBackground('plus-checkout-create', {
         plusCheckoutCountry: result.country || 'US',
         plusCheckoutCurrency: result.currency || 'USD',
         plusCheckoutSource: PLUS_PAYMENT_METHOD_PAYPAL_HOSTED,
-        plusCheckoutUrl: landedUrl,
-        plusReturnUrl: isAlreadySuccessful ? landedUrl : '',
+        plusCheckoutUrl: completedUrl,
+        plusReturnUrl: isAlreadySuccessful ? completedUrl : '',
         plusHostedCheckoutCompleted: isAlreadySuccessful,
       });
     }

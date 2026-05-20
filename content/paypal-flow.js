@@ -292,6 +292,9 @@ function findHostedCreateAccountButton() {
 }
 
 function isHostedCreateAccountPage() {
+  if (isHostedLoginPage()) {
+    return false;
+  }
   if (document.getElementById('cardNumber') || document.getElementById('billingLine1')) {
     return false;
   }
@@ -427,6 +430,31 @@ async function clickHostedSubmitButton(options = {}) {
   };
 }
 
+async function clickHostedEmailNextButton() {
+  const button = await waitUntil(() => {
+    const candidate = findEmailNextButton();
+    return candidate && isVisibleElement(candidate) && isEnabledControl(candidate) ? candidate : null;
+  }, {
+    intervalMs: 500,
+    timeoutMs: 15000,
+    timeoutMessage: 'PayPal hosted checkout 未找到邮箱页“下一页”按钮。',
+  });
+  const buttonText = getActionText(button);
+  await performPayPalOperationWithDelay({
+    stepKey: getHostedStepKey(PAYPAL_HOSTED_STAGE_LOGIN),
+    kind: 'click',
+    label: 'hosted-paypal-email-next',
+  }, async () => {
+    simulateClick(button);
+  });
+  await sleep(1000);
+  return {
+    clicked: true,
+    buttonText,
+    verificationRequired: hasHostedVerificationInputs(),
+  };
+}
+
 function normalizeHostedPhoneDigits(value = '') {
   return String(value || '').replace(/\D/g, '');
 }
@@ -530,10 +558,7 @@ async function submitHostedLogin(payload = {}) {
     throw new Error('PayPal hosted checkout 未找到邮箱输入框。');
   }
   refillPayPalEmailInput(emailInput, email);
-  const clickResult = await clickHostedSubmitButton({
-    stage: PAYPAL_HOSTED_STAGE_LOGIN,
-    label: 'hosted-paypal-email-submit',
-  });
+  const clickResult = await clickHostedEmailNextButton();
   return {
     stage: PAYPAL_HOSTED_STAGE_LOGIN,
     submitted: true,

@@ -5,8 +5,8 @@
   const PLUS_CHECKOUT_INJECT_FILES = ['content/utils.js', 'content/operation-delay.js', 'content/plus-checkout.js'];
   const PLUS_CHECKOUT_URL_PATTERN = /^https:\/\/chatgpt\.com\/checkout(?:\/|$)/i;
   const PLUS_CHECKOUT_FRAME_READY_DELAY_MS = 500;
-  const PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS = 3;
-  const PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS = 20000;
+  const PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS = 5;
+  const PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS = 10000;
   const PLUS_PAYMENT_METHOD_PAYPAL = 'paypal';
   const PLUS_PAYMENT_METHOD_GOPAY = 'gopay';
   const PLUS_PAYMENT_METHOD_GPC_HELPER = 'gpc-helper';
@@ -1883,7 +1883,7 @@
         await addLog(
           attempt === 1
             ? '步骤 7：账单地址已填写完成，等待 3 秒让 checkout 完成校验...'
-            : `步骤 7：准备第 ${attempt}/${PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS} 次重新提交账单地址...`,
+            : `步骤 7：准备第 ${attempt}/${PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS} 次重新检测订阅按钮...`,
           attempt === 1 ? 'info' : 'warn'
         );
         await sleepWithStop(3000);
@@ -1907,17 +1907,27 @@
           continue;
         }
 
-        await addLog(`步骤 7：账单地址已提交，正在等待跳转到 ${paymentConfig.label}（${attempt}/${PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS}）...`, 'info');
+        const subscribeClicked = subscribeResult?.clicked !== false;
+        const subscribeButtonText = String(subscribeResult?.subscribeButtonText || '').trim();
+        const subscribeButtonStatus = String(subscribeResult?.subscribeButtonStatus || '').trim();
+        if (subscribeClicked) {
+          await addLog(`步骤 7：已点击订阅按钮，正在等待跳转到 ${paymentConfig.label}（${attempt}/${PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS}）...`, 'info');
+        } else {
+          const buttonStateLabel = subscribeButtonText || subscribeButtonStatus || 'unknown';
+          await addLog(`步骤 7：订阅按钮当前为「${buttonStateLabel}」，本轮未点击，正在等待页面是否跳转到 ${paymentConfig.label}（${attempt}/${PLUS_CHECKOUT_SUBMIT_MAX_ATTEMPTS}）...`, 'warn');
+        }
         redirectedToPayment = await waitForPaymentRedirectAfterSubmit(tabId, paymentMethod);
         if (redirectedToPayment) {
           break;
         }
-        lastSubmitError = `提交后 ${Math.round(PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS / 1000)} 秒内未跳转到 ${paymentConfig.label}`;
-        await addLog(`步骤 7：${lastSubmitError}，将重试提交。`, 'warn');
+        lastSubmitError = subscribeClicked
+          ? `点击订阅后 ${Math.round(PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS / 1000)} 秒内未跳转到 ${paymentConfig.label}`
+          : `订阅按钮当前为「${subscribeButtonText || subscribeButtonStatus || 'unknown'}」，${Math.round(PLUS_CHECKOUT_PAYPAL_REDIRECT_TIMEOUT_MS / 1000)} 秒内未跳转到 ${paymentConfig.label}`;
+        await addLog(`步骤 7：${lastSubmitError}，将重新检测订阅按钮。`, 'warn');
       }
 
       if (!redirectedToPayment) {
-        throw new Error(`步骤 7：多次提交账单地址后仍未跳转到 ${paymentConfig.label}。${lastSubmitError}`);
+        throw new Error(`步骤 7：多次检测订阅按钮后仍未跳转到 ${paymentConfig.label}。${lastSubmitError}`);
       }
 
       await completeNodeFromBackground('plus-checkout-billing', {

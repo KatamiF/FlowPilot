@@ -566,6 +566,49 @@ return { findSubscribeButton };
   assert.equal(api.findSubscribeButton(), submitButton);
 });
 
+test('getSubscribeButtonState does not treat processing subscribe text as clickable', () => {
+  const bundle = [
+    extractFunction('normalizeText'),
+    extractFunction('getActionText'),
+    extractFunction('getSearchText'),
+    extractFunction('getFieldText'),
+    extractFunction('getCombinedSearchText'),
+    extractFunction('isEnabledControl'),
+    extractFunction('isBusySubscribeButton'),
+    'const SUBSCRIBE_READY_TEXT_PATTERN = /\\u8ba2\\u9605|\\u7ee7\\u7eed|\\u786e\\u8ba4|\\u652f\\u4ed8|subscribe|continue|confirm|pay|\\u8d2d\\u4e70\\s*ChatGPT\\s*Plus|start\\s*subscription|place\\s*order/i;',
+    'const SUBSCRIBE_PROCESSING_TEXT_PATTERN = /\\u6b63\\u5728\\u5904\\u7406|\\u5904\\u7406\\u4e2d|\\u8bf7\\u7a0d\\u5019|\\u52a0\\u8f7d\\u4e2d|loading|processing|submitting/i;',
+    extractFunction('getSubscribeButtonState'),
+  ].join('\n');
+
+  const processingButton = createElement({
+    tagName: 'BUTTON',
+    text: '订阅 正在处理',
+    attrs: { type: 'submit' },
+  });
+  const readyButton = createElement({
+    tagName: 'BUTTON',
+    text: '订阅',
+    attrs: { type: 'submit' },
+  });
+
+  const api = new Function(`
+${bundle}
+return { getSubscribeButtonState };
+`)();
+
+  assert.deepEqual(
+    {
+      ready: api.getSubscribeButtonState(processingButton).ready,
+      status: api.getSubscribeButtonState(processingButton).status,
+    },
+    {
+      ready: false,
+      status: 'processing',
+    }
+  );
+  assert.equal(api.getSubscribeButtonState(readyButton).ready, true);
+});
+
 test('humanLikeClick submits a detached submit button through its form attribute', async () => {
   const bundle = [
     'function throwIfStopped() {}',

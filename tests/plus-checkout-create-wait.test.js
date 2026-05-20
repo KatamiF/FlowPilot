@@ -288,7 +288,7 @@ test('GoPay plus checkout create forwards gopay payment method to the checkout c
   assert.deepStrictEqual(events[0]?.payload, { paymentMethod: 'gopay' });
 });
 
-test('PayPal no-card binding create only opens hosted checkout and leaves page steps to later nodes', async () => {
+test('PayPal no-card binding create opens and submits hosted OpenAI checkout before completing', async () => {
   const events = [];
   let currentUrl = 'https://chatgpt.com/';
   const executor = api.createPlusCheckoutCreateExecutor({
@@ -315,8 +315,27 @@ test('PayPal no-card binding create only opens hosted checkout and leaves page s
     ensureContentScriptReadyOnTabUntilStopped: async (source, tabId, options) => {
       events.push({ type: 'ready', source, tabId, options });
     },
-    fetch: async () => {
-      throw new Error('create node should not fetch address or run PayPal page automation');
+    fetch: async (url) => {
+      events.push({ type: 'fetch', url });
+      assert.equal(url, 'https://www.meiguodizhi.com/api/v1/dz');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          address: {
+            Address: '1 Main St',
+            City: 'New York',
+            State: 'New York',
+            Zip_Code: '10001',
+          },
+        }),
+      };
+    },
+    getState: async () => {
+      events.push({ type: 'get-state' });
+      return {
+        hostedCheckoutPhoneNumber: '4155551234',
+      };
     },
     registerTab: async (source, tabId) => {
       events.push({ type: 'register', source, tabId });
@@ -331,6 +350,10 @@ test('PayPal no-card binding create only opens hosted checkout and leaves page s
           country: 'US',
           currency: 'USD',
         };
+      }
+      if (message.type === 'RUN_PAYPAL_HOSTED_OPENAI_CHECKOUT_STEP') {
+        currentUrl = 'https://www.paypal.com/pay?token=BA-hosted';
+        return { clicked: true };
       }
       throw new Error(`unexpected message type ${message.type}`);
     },
@@ -358,13 +381,17 @@ test('PayPal no-card binding create only opens hosted checkout and leaves page s
     events.find((event) => event.type === 'tab-update')?.payload?.url,
     'https://pay.openai.com/c/pay/cs_hosted'
   );
-  const statePayload = events.find((event) => event.type === 'set-state')?.payload || {};
+  const statePayload = events.filter((event) => event.type === 'set-state').at(-1)?.payload || {};
   assert.equal(statePayload.plusCheckoutSource, 'paypal-hosted');
   assert.equal(statePayload.plusCheckoutCountry, 'US');
   assert.equal(statePayload.plusCheckoutCurrency, 'USD');
   assert.equal(statePayload.plusReturnUrl, '');
   assert.equal(events.some((event) => event.type === 'tab-message' && event.message.type === 'FILL_PLUS_BILLING_AND_SUBMIT'), false);
-  assert.equal(events.some((event) => event.type === 'tab-message' && event.message.type === 'RUN_PAYPAL_HOSTED_OPENAI_CHECKOUT_STEP'), false);
+  assert.equal(events.some((event) => event.type === 'tab-message' && event.message.type === 'RUN_PAYPAL_HOSTED_OPENAI_CHECKOUT_STEP'), true);
+  assert.equal(
+    events.find((event) => event.type === 'tab-message' && event.message.type === 'RUN_PAYPAL_HOSTED_OPENAI_CHECKOUT_STEP')?.message?.payload?.address?.street,
+    '1 Main St'
+  );
   assert.deepStrictEqual(events.find((event) => event.type === 'complete'), {
     type: 'complete',
     step: 'plus-checkout-create',
@@ -372,7 +399,7 @@ test('PayPal no-card binding create only opens hosted checkout and leaves page s
       plusCheckoutCountry: 'US',
       plusCheckoutCurrency: 'USD',
       plusCheckoutSource: 'paypal-hosted',
-      plusCheckoutUrl: 'https://pay.openai.com/c/pay/cs_hosted',
+      plusCheckoutUrl: 'https://www.paypal.com/pay?token=BA-hosted',
       plusReturnUrl: '',
       plusHostedCheckoutCompleted: false,
     },

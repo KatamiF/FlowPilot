@@ -408,6 +408,11 @@ function createHostedPayPalHarness(options = {}) {
     text: 'Agree & Create Account',
     attrs: { 'data-testid': 'createAccountButton' },
   });
+  const nextButton = createDomElement({
+    tagName: 'BUTTON',
+    id: 'btnNext',
+    text: '下一页',
+  });
 
   function setElements(nextElements) {
     elements = nextElements;
@@ -448,6 +453,15 @@ function createHostedPayPalHarness(options = {}) {
     body.innerText = 'Create your PayPal account. Agree & Create Account';
     body.textContent = body.innerText;
     setElements([createAccountButton]);
+  }
+
+  function showPayEmail() {
+    location.href = 'https://www.paypal.com/pay?token=demo';
+    location.host = 'www.paypal.com';
+    location.pathname = '/pay';
+    body.innerText = '请输入您的电子邮箱地址。 下一页 或 创建账户';
+    body.textContent = body.innerText;
+    setElements([emailInput, nextButton, createAccountButton]);
   }
 
   const context = {
@@ -541,6 +555,7 @@ function createHostedPayPalHarness(options = {}) {
   return {
     events,
     send,
+    showPayEmail,
     showCreateAccount,
     showGuestCheckout,
   };
@@ -608,6 +623,40 @@ test('PayPal hosted guest checkout blocks submit when rendered phone differs fro
 
   assert.match(result.error, /电话不一致/);
   assert.equal(harness.events.some((event) => event.type === 'click' && event.id === 'hostedSubmit'), false);
+});
+
+test('PayPal hosted /pay email page fills email and clicks Next instead of Create Account', async () => {
+  const harness = createHostedPayPalHarness();
+  harness.showPayEmail();
+
+  const state = await harness.send({
+    type: 'PAYPAL_HOSTED_GET_STATE',
+    source: 'test',
+    payload: {},
+  });
+  assert.equal(state.ok, true);
+  assert.equal(state.hostedStage, 'pay_login');
+  assert.equal(state.hasHostedEmailInput, true);
+
+  const result = await harness.send({
+    type: 'PAYPAL_RUN_HOSTED_CHECKOUT_STEP',
+    source: 'test',
+    payload: {
+      expectedStage: 'pay_login',
+      email: 'guest@example.com',
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.stage, 'pay_login');
+  assert.equal(result.submitted, true);
+  assert.equal(harness.events.some((event) => event.type === 'fill' && event.id === 'email' && event.value === 'guest@example.com'), true);
+  assert.equal(harness.events.some((event) => event.type === 'click' && event.id === 'btnNext'), true);
+  assert.equal(harness.events.some((event) => event.type === 'click' && event.id === 'createAccountButton'), false);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(harness.events.filter((event) => event.type === 'operation').map((event) => event.metadata))),
+    [{ stepKey: 'paypal-hosted-email', kind: 'click', label: 'hosted-paypal-email-next' }]
+  );
 });
 
 test('PayPal hosted create account page is detected and handled as its own step', async () => {
