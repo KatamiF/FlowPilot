@@ -710,6 +710,66 @@ test('step 7 keeps phone login after step 8 stores an unbound email for phone si
   assert.equal(events.payloads[0].accountIdentifier, '66959916439');
 });
 
+test('step 7 ignores stale email force flags outside bound-email relogin', async () => {
+  const source = fs.readFileSync('flows/openai/background/steps/oauth-login.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundStep7;`)(globalScope);
+
+  const events = {
+    payloads: [],
+  };
+
+  const pollutedPhoneSignupState = {
+    nodeId: 'oauth-login',
+    authLoginPhase: 'primary-login',
+    phoneVerificationEnabled: true,
+    signupMethod: 'phone',
+    resolvedSignupMethod: 'phone',
+    forceLoginIdentifierType: 'email',
+    forceEmailLogin: true,
+    email: 'bound.step8@example.com',
+    accountIdentifierType: 'phone',
+    accountIdentifier: '66959916439',
+    signupPhoneNumber: '66959916439',
+    signupPhoneCompletedActivation: {
+      activationId: 'signup-done',
+      phoneNumber: '66959916439',
+      countryId: 52,
+      countryLabel: 'Thailand',
+    },
+    password: 'secret',
+  };
+
+  const executor = api.createStep7Executor({
+    addLog: async () => {},
+    completeNodeFromBackground: async () => {},
+    getErrorMessage: (error) => error?.message || String(error || ''),
+    getLoginAuthStateLabel: (state) => state || 'unknown',
+    getState: async () => ({ ...pollutedPhoneSignupState }),
+    isStep6RecoverableResult: (result) => result?.step6Outcome === 'recoverable',
+    isStep6SuccessResult: (result) => result?.step6Outcome === 'success',
+    refreshOAuthUrlBeforeStep6: async () => 'https://oauth.example/latest',
+    reuseOrCreateTab: async () => {},
+    sendToContentScriptResilient: async (_sourceName, message) => {
+      events.payloads.push(message.payload);
+      return {
+        step6Outcome: 'success',
+        state: 'phone_verification_page',
+        loginVerificationRequestedAt: 123456,
+      };
+    },
+    STEP6_MAX_ATTEMPTS: 3,
+    throwIfStopped: () => {},
+  });
+
+  await executor.executeStep7(pollutedPhoneSignupState);
+
+  assert.equal(events.payloads[0].loginIdentifierType, 'phone');
+  assert.equal(events.payloads[0].phoneNumber, '66959916439');
+  assert.equal(events.payloads[0].email, '');
+  assert.equal(events.payloads[0].accountIdentifier, '66959916439');
+});
+
 test('step 7 can infer phone login from an available phone signup configuration before step 2 finishes', async () => {
   const source = fs.readFileSync('flows/openai/background/steps/oauth-login.js', 'utf8');
   const globalScope = {};

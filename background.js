@@ -1056,6 +1056,74 @@ function getAuthChainStartStepId(state = {}) {
   return isPlusModeState(state) ? 10 : FINAL_OAUTH_CHAIN_START_STEP;
 }
 
+function normalizeAuthRecoveryIdentifierType(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'phone' || normalized === 'email' ? normalized : '';
+}
+
+function isPhoneSignupAuthRecoveryState(state = {}) {
+  const signupMethod = String(state?.resolvedSignupMethod || state?.signupMethod || '').trim().toLowerCase();
+  return signupMethod === SIGNUP_METHOD_PHONE || signupMethod === 'phone';
+}
+
+function getPhoneSignupAuthRecoveryIdentity(state = {}) {
+  const accountIdentifierType = normalizeAuthRecoveryIdentifierType(state?.accountIdentifierType);
+  const phoneNumber = String(
+    state?.signupPhoneNumber
+    || state?.signupPhoneCompletedActivation?.phoneNumber
+    || state?.signupPhoneActivation?.phoneNumber
+    || (accountIdentifierType === 'phone' ? state?.accountIdentifier : '')
+    || ''
+  ).trim();
+  if (!phoneNumber) {
+    return null;
+  }
+  return {
+    accountIdentifierType: 'phone',
+    accountIdentifier: phoneNumber,
+    signupPhoneNumber: phoneNumber,
+    signupPhoneCompletedActivation: state?.signupPhoneCompletedActivation || null,
+    signupPhoneActivation: state?.signupPhoneActivation || null,
+  };
+}
+
+function isBoundEmailReloginAuthRecoveryNode(nodeId = '') {
+  return [
+    'relogin-bound-email',
+    'fetch-bound-email-login-code',
+    'post-bound-email-phone-verification',
+  ].includes(String(nodeId || '').trim());
+}
+
+function buildAuthLoginRecoveryState(initialState = {}, authLoginNodeId = 'oauth-login') {
+  const nodeId = String(authLoginNodeId || '').trim() || 'oauth-login';
+  const isBoundEmailRelogin = isBoundEmailReloginAuthRecoveryNode(nodeId);
+  if (isBoundEmailRelogin) {
+    return {
+      ...initialState,
+      authLoginPhase: 'bound-email-relogin',
+    };
+  }
+
+  const phoneIdentity = isPhoneSignupAuthRecoveryState(initialState)
+    ? getPhoneSignupAuthRecoveryIdentity(initialState)
+    : null;
+  if (!phoneIdentity) {
+    return {
+      ...initialState,
+      authLoginPhase: 'primary-login',
+    };
+  }
+
+  return {
+    ...initialState,
+    ...phoneIdentity,
+    authLoginPhase: 'primary-login',
+    forceLoginIdentifierType: 'phone',
+    forceEmailLogin: false,
+  };
+}
+
 function getStepDefinitionForState(step, state = {}) {
   const numericStep = Number(step);
   return getStepDefinitionsForState(state).find((definition) => Number(definition.id) === numericStep) || null;
@@ -15140,6 +15208,7 @@ async function rerunStep7ForStep8Recovery(options = {}) {
     ? getAuthChainStartStepId(initialState)
     : FINAL_OAUTH_CHAIN_START_STEP;
   const authLoginNodeId = getNodeIdByStepForState(authLoginStep, initialState) || 'oauth-login';
+  const recoveryState = buildAuthLoginRecoveryState(initialState, authLoginNodeId);
   await addLog(logMessage, 'warn', {
     step: logStep,
     stepKey: logStepKey,
@@ -15149,8 +15218,9 @@ async function rerunStep7ForStep8Recovery(options = {}) {
 
   try {
     await step7Executor.executeStep7({
-      ...initialState,
+      ...recoveryState,
       visibleStep: authLoginStep,
+      nodeId: authLoginNodeId,
     });
   } catch (err) {
     const latestState = await getState();

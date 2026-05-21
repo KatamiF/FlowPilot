@@ -58,6 +58,85 @@ test('background auth chain set does not include Plus session import nodes', () 
   assert.doesNotMatch(authChainBlock, /cpa-session-import/);
 });
 
+test('step 8 recovery rebuilds primary phone login identity before rerunning oauth-login', async () => {
+  const events = {
+    executePayloads: [],
+    logs: [],
+    statuses: [],
+  };
+  let state = {
+    signupMethod: 'phone',
+    resolvedSignupMethod: 'phone',
+    phoneVerificationEnabled: true,
+    email: 'bound.step8@example.com',
+    forceLoginIdentifierType: 'email',
+    forceEmailLogin: true,
+    accountIdentifierType: 'email',
+    accountIdentifier: 'bound.step8@example.com',
+    signupPhoneNumber: '+447780579093',
+    signupPhoneCompletedActivation: {
+      activationId: 'signup-done',
+      phoneNumber: '+447780579093',
+    },
+  };
+
+  const api = new Function('events', 'state', `
+const SIGNUP_METHOD_PHONE = 'phone';
+const FINAL_OAUTH_CHAIN_START_STEP = 7;
+function getNodeIdByStepForState(step) {
+  return Number(step) === 7 ? 'oauth-login' : '';
+}
+function getErrorMessage(error) {
+  return error?.message || String(error || '');
+}
+function isStopError() {
+  return false;
+}
+function isTerminalSecurityBlockedError() {
+  return false;
+}
+async function getState() {
+  return { ...state };
+}
+async function addLog(message, level, options) {
+  events.logs.push({ message, level, options });
+}
+async function setNodeStatus(nodeId, status) {
+  events.statuses.push({ nodeId, status });
+}
+async function appendManualAccountRunRecordIfNeeded() {}
+async function sleepWithStop() {}
+function throwIfStopped() {}
+const step7Executor = {
+  async executeStep7(payload) {
+    events.executePayloads.push(payload);
+  },
+};
+${extractFunction('normalizeAuthRecoveryIdentifierType')}
+${extractFunction('isPhoneSignupAuthRecoveryState')}
+${extractFunction('getPhoneSignupAuthRecoveryIdentity')}
+${extractFunction('isBoundEmailReloginAuthRecoveryNode')}
+${extractFunction('buildAuthLoginRecoveryState')}
+${extractFunction('rerunStep7ForStep8Recovery')}
+return { rerunStep7ForStep8Recovery };
+`)(events, state);
+
+  await api.rerunStep7ForStep8Recovery({
+    logMessage: 'retry primary login',
+    logStep: 8,
+  });
+
+  assert.equal(events.executePayloads.length, 1);
+  assert.equal(events.executePayloads[0].nodeId, 'oauth-login');
+  assert.equal(events.executePayloads[0].visibleStep, 7);
+  assert.equal(events.executePayloads[0].authLoginPhase, 'primary-login');
+  assert.equal(events.executePayloads[0].forceLoginIdentifierType, 'phone');
+  assert.equal(events.executePayloads[0].forceEmailLogin, false);
+  assert.equal(events.executePayloads[0].accountIdentifierType, 'phone');
+  assert.equal(events.executePayloads[0].accountIdentifier, '+447780579093');
+  assert.equal(events.executePayloads[0].signupPhoneNumber, '+447780579093');
+});
+
 const NODE_EXECUTE_COMPAT_HELPERS = `
 const AUTH_CHAIN_NODE_IDS = new Set(['oauth-login', 'fetch-login-code', 'confirm-oauth', 'platform-verify']);
 const STEP_NODE_IDS = {
