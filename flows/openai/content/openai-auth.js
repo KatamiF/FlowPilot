@@ -2624,6 +2624,19 @@ async function step2_clickRegister(payload = {}) {
 // ============================================================
 
 async function step3_fillEmailPassword(payload) {
+  const resolvePasswordPageInfo = (rawUrl = '') => {
+    const url = String(rawUrl || '').trim();
+    let path = '';
+    try {
+      path = new URL(url || location.href, 'https://auth.openai.com').pathname || '';
+    } catch {
+      path = String(location.pathname || '');
+    }
+    const mode = /\/log-in\/password(?:[/?#]|$)/i.test(path)
+      ? 'login'
+      : (/\/(?:create-account|u\/signup|signup)\/password(?:[/?#]|$)/i.test(path) ? 'signup' : '');
+    return { url: url || location.href, path, mode };
+  };
   const performOperationWithDelay = typeof getOperationDelayRunner === 'function'
     ? getOperationDelayRunner()
     : async (metadata, operation) => {
@@ -2693,6 +2706,7 @@ async function step3_fillEmailPassword(payload) {
     throw new Error(`当前密码页邮箱为 ${snapshot.displayedEmail}，与目标邮箱 ${email} 不一致，请先回到步骤 1 重新开始。`);
   }
 
+  const passwordPageInfo = resolvePasswordPageInfo(snapshot.url || location.href);
   await humanPause(600, 1500);
   await performOperationWithDelay({ stepKey: 'fill-password', kind: 'fill', label: 'signup-password' }, async () => {
     fillInput(snapshot.passwordInput, password);
@@ -2709,7 +2723,8 @@ async function step3_fillEmailPassword(payload) {
     logSignupPasswordDiagnostics('步骤 3：当前密码页同时存在一次性验证码入口', 'info');
   }
 
-  const signupVerificationRequestedAt = submitBtn ? Date.now() : null;
+  const isLoginPasswordPage = passwordPageInfo.mode === 'login';
+  const signupVerificationRequestedAt = submitBtn && !isLoginPasswordPage ? Date.now() : null;
   const completionPayload = {
     email,
     phoneNumber: String(payload?.phoneNumber || '').trim(),
@@ -2717,6 +2732,10 @@ async function step3_fillEmailPassword(payload) {
     accountIdentifier,
     signupVerificationRequestedAt,
     deferredSubmit: Boolean(submitBtn),
+    passwordPageUrl: passwordPageInfo.url,
+    passwordPagePath: passwordPageInfo.path,
+    passwordPageMode: passwordPageInfo.mode,
+    ...(isLoginPasswordPage ? { passwordLoginFlow: true } : {}),
   };
 
   reportComplete(3, completionPayload);
@@ -4762,6 +4781,13 @@ function inspectSignupVerificationState() {
     };
   }
 
+  if (typeof isOAuthConsentPage === 'function' && isOAuthConsentPage()) {
+    return {
+      state: 'oauth_consent_page',
+      url: location.href,
+    };
+  }
+
   if (typeof isPhoneVerificationPageReady === 'function' && isPhoneVerificationPageReady()) {
     return {
       state: 'verification',
@@ -4804,6 +4830,7 @@ async function waitForSignupVerificationTransition(timeout = 5000) {
     if (
       snapshot.state === 'step5'
       || snapshot.state === 'logged_in_home'
+      || snapshot.state === 'oauth_consent_page'
       || snapshot.state === 'verification'
       || snapshot.state === 'contact_verification_server_error'
       || snapshot.state === 'error'
@@ -4896,6 +4923,19 @@ async function prepareSignupVerificationFlow(payload = {}, timeout = 30000) {
         ready: true,
         alreadyVerified: true,
         skipProfileStep: true,
+        retried: recoveryRound,
+        prepareSource,
+      };
+    }
+
+    if (snapshot.state === 'oauth_consent_page') {
+      log(`${prepareLogLabel}：页面已直接进入 OAuth 授权页，本步骤按已完成处理。`, 'ok');
+      return {
+        ready: true,
+        alreadyVerified: true,
+        state: 'oauth_consent_page',
+        skipLoginVerificationStep: true,
+        directOAuthConsentPage: true,
         retried: recoveryRound,
         prepareSource,
       };
