@@ -11,12 +11,12 @@
       buildPersistentSettingsPayload,
       broadcastDataUpdate,
       applyIpProxySettingsFromState,
-      cancelScheduledAutoRun,
       checkIcloudSession,
       clearAccountRunHistory,
       deleteAccountRunHistoryRecords,
       clearAutoRunTimerAlarm,
       clearFreeReusablePhoneActivation,
+      clearGrokSsoCookies,
       clearLuckmailRuntimeState,
       clearYydsMailRuntimeState,
       clearStopRequest,
@@ -144,7 +144,6 @@
       normalizeMail2925Accounts,
       normalizePayPalAccounts,
       normalizeRunCount,
-      AUTO_RUN_TIMER_KIND_SCHEDULED_START,
       notifyNodeComplete,
       notifyNodeError,
       patchMail2925Account,
@@ -157,7 +156,6 @@
       handleCloudflareSecurityBlocked,
       resetState,
       resumeAutoRun,
-      scheduleAutoRun,
       selectLuckmailPurchase,
       switchIpProxy,
       changeIpProxyExit,
@@ -1148,6 +1146,13 @@
           return await clearFreeReusablePhoneActivation();
         }
 
+        case 'CLEAR_GROK_SSO_COOKIES': {
+          if (typeof clearGrokSsoCookies !== 'function') {
+            throw new Error('Grok SSO 清空能力未接入。');
+          }
+          return await clearGrokSsoCookies();
+        }
+
         case 'SET_FREE_REUSABLE_PHONE': {
           if (typeof setFreeReusablePhoneActivation !== 'function') {
             throw new Error('白嫖复用手机号记录能力未接入。');
@@ -1316,75 +1321,13 @@
             throw new Error(autoRunStartValidation.errors?.[0]?.message || '当前设置不支持启动自动流程。');
           }
           if (getPendingAutoRunTimerPlan(state)) {
-            throw new Error('已有自动运行倒计时计划，请先取消或立即开始。');
+            throw new Error('已有线程间隔等待，请先停止或立即继续。');
           }
           const totalRuns = normalizeRunCount(message.payload?.totalRuns || 1);
           const autoRunSkipFailures = Boolean(message.payload?.autoRunSkipFailures);
           const mode = message.payload?.mode === 'continue' ? 'continue' : 'restart';
           await setState({ autoRunSkipFailures });
           startAutoRunLoop(totalRuns, { autoRunSkipFailures, mode });
-          return { ok: true };
-        }
-
-        case 'SCHEDULE_AUTO_RUN': {
-          clearStopRequest();
-          if (message.source === 'sidepanel') {
-            await lockAutomationWindowFromMessage(message, sender);
-          }
-          if (Boolean(message.payload?.accountContributionEnabled) && typeof setAccountContributionMode === 'function') {
-            await setAccountContributionMode(true, {
-              adapterId: message.payload?.contributionAdapterId,
-              flowId: message.payload?.activeFlowId || message.payload?.flowId,
-            });
-            if (typeof setState === 'function') {
-              const contributionNickname = String(message.payload?.contributionNickname || '').trim();
-              const contributionQq = String(message.payload?.contributionQq || '').trim();
-              await setState({
-                contributionNickname,
-                contributionQq,
-              });
-            }
-          }
-          const autoRunFlowStateUpdates = buildAutoRunFlowStateUpdates(message.payload || {});
-          if (Object.keys(autoRunFlowStateUpdates).length > 0 && typeof setState === 'function') {
-            await setState(autoRunFlowStateUpdates);
-          }
-          const state = await getState();
-          const autoRunStartValidation = validateAutoRunStart(state, {
-            activeFlowId: autoRunFlowStateUpdates.activeFlowId ?? state?.activeFlowId,
-            targetId: autoRunFlowStateUpdates.targetId ?? state?.targetId,
-            state,
-          });
-          if (autoRunStartValidation?.ok === false) {
-            throw new Error(autoRunStartValidation.errors?.[0]?.message || '当前设置不支持启动自动流程。');
-          }
-          const totalRuns = normalizeRunCount(message.payload?.totalRuns || 1);
-          return await scheduleAutoRun(totalRuns, {
-            delayMinutes: message.payload?.delayMinutes,
-            autoRunSkipFailures: Boolean(message.payload?.autoRunSkipFailures),
-            mode: message.payload?.mode,
-          });
-        }
-
-        case 'START_SCHEDULED_AUTO_RUN_NOW': {
-          clearStopRequest();
-          if (message.source === 'sidepanel') {
-            await lockAutomationWindowFromMessage(message, sender);
-          }
-          const started = await launchAutoRunTimerPlan('manual', {
-            expectedKinds: [AUTO_RUN_TIMER_KIND_SCHEDULED_START],
-          });
-          if (!started) {
-            throw new Error('当前没有可立即开始的倒计时计划。');
-          }
-          return { ok: true };
-        }
-
-        case 'CANCEL_SCHEDULED_AUTO_RUN': {
-          const cancelled = await cancelScheduledAutoRun();
-          if (!cancelled) {
-            throw new Error('当前没有可取消的倒计时计划。');
-          }
           return { ok: true };
         }
 
@@ -1480,16 +1423,10 @@
             || (nextPlusModeEnabled && plusPaymentChanged)
             || (nextPlusModeEnabled && plusAccountAccessStrategyChanged)
             || phoneSignupReloginAfterBindEmailChanged;
-          const oauthFlowTimeoutDisabled = Object.prototype.hasOwnProperty.call(updates, 'oauthFlowTimeoutEnabled')
-            && updates.oauthFlowTimeoutEnabled === false;
           const canonicalSettingsUpdates = await setPersistentSettings(updates);
           const stateUpdates = {
             ...canonicalSettingsUpdates,
             ...sessionUpdates,
-            ...(oauthFlowTimeoutDisabled ? {
-              oauthFlowDeadlineAt: null,
-              oauthFlowDeadlineSourceUrl: null,
-            } : {}),
           };
           if (Object.prototype.hasOwnProperty.call(canonicalSettingsUpdates, 'activeFlowId')
             && !Object.prototype.hasOwnProperty.call(stateUpdates, 'flowId')) {

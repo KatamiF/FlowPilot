@@ -23,6 +23,7 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
   const goPaySteps = api.getSteps({ plusModeEnabled: true, plusPaymentMethod: 'gopay' });
   const gpcSteps = api.getSteps({ plusModeEnabled: true, plusPaymentMethod: 'gpc-helper' });
   const kiroSteps = api.getSteps({ activeFlowId: 'kiro' });
+  const grokSteps = api.getSteps({ activeFlowId: 'grok' });
 
   assert.equal(Array.isArray(steps), true);
   assert.equal(steps.length, 11);
@@ -162,8 +163,9 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
   assert.equal(api.getLastStepId({ plusModeEnabled: true, signupMethod: 'phone', phoneSignupReloginAfterBindEmailEnabled: true }), 19);
   assert.equal(api.hasFlow('openai'), true);
   assert.equal(api.hasFlow('kiro'), true);
+  assert.equal(api.hasFlow('grok'), true);
   assert.equal(api.hasFlow('site-a'), false);
-  assert.deepStrictEqual(api.getRegisteredFlowIds(), ['openai', 'kiro']);
+  assert.deepStrictEqual(api.getRegisteredFlowIds(), ['openai', 'kiro', 'grok']);
   assert.deepStrictEqual(api.getSteps({ activeFlowId: 'site-a' }), []);
   assert.equal(api.getStepById(2, { activeFlowId: 'site-a' }), null);
   assert.deepStrictEqual(
@@ -207,6 +209,38 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
       ['kiro-start-desktop-authorize'],
       ['kiro-complete-desktop-authorize'],
       ['kiro-upload-credential'],
+      [],
+    ]
+  );
+  assert.deepStrictEqual(
+    grokSteps.map((step) => step.key),
+    [
+      'grok-open-signup-page',
+      'grok-submit-email',
+      'grok-submit-verification-code',
+      'grok-submit-profile',
+      'grok-extract-sso-cookie',
+      'grok-upload-sso-to-webchat2api',
+    ]
+  );
+  assert.equal(grokSteps.every((step) => step.flowId === 'grok'), true);
+  assert.equal(grokSteps[0].driverId, 'flows/grok/background/register-runner');
+  assert.equal(grokSteps[0].sourceId, 'grok-register-page');
+  assert.equal(grokSteps[2].mailRuleId, 'grok-submit-verification-code');
+  assert.deepStrictEqual(
+    grokSteps.map((step) => step.title),
+    ['打开 Grok 注册页', '获取邮箱并继续', '获取验证码并继续', '填写资料并继续', '提取 SSO Cookie', '上传 SSO 到 webchat2api']
+  );
+  assert.deepStrictEqual(api.getStepIds({ activeFlowId: 'grok' }), [1, 2, 3, 4, 5, 6]);
+  assert.equal(api.getLastStepId({ activeFlowId: 'grok' }), 6);
+  assert.deepStrictEqual(
+    api.getNodes({ activeFlowId: 'grok' }).map((node) => node.next),
+    [
+      ['grok-submit-email'],
+      ['grok-submit-verification-code'],
+      ['grok-submit-profile'],
+      ['grok-extract-sso-cookie'],
+      ['grok-upload-sso-to-webchat2api'],
       [],
     ]
   );
@@ -397,6 +431,34 @@ test('Plus no-payment mode removes only payment chain nodes', () => {
   assert.equal(cpaNodes.at(-1)?.nodeId, 'cpa-session-import');
   assert.deepStrictEqual(cpaNodes.find((node) => node.nodeId === 'fill-profile')?.next, ['wait-registration-success']);
   assert.deepStrictEqual(cpaNodes.find((node) => node.nodeId === 'wait-registration-success')?.next, ['cpa-session-import']);
+});
+
+test('OpenAI OAuth workflow removes post-login phone verification when phone verification is disabled', () => {
+  const globalScope = {};
+  const api = new Function('self', `${readStepDefinitionsBundle()}; return self.MultiPageStepDefinitions;`)(globalScope);
+
+  [
+    { label: 'normal', options: { phoneVerificationEnabled: false } },
+    { label: 'plus paypal', options: { plusModeEnabled: true, phoneVerificationEnabled: false } },
+    { label: 'plus gopay', options: { plusModeEnabled: true, plusPaymentMethod: 'gopay', phoneVerificationEnabled: false } },
+    { label: 'phone relogin', options: { signupMethod: 'phone', phoneSignupReloginAfterBindEmailEnabled: true, phoneVerificationEnabled: false } },
+  ].forEach(({ label, options }) => {
+    const steps = api.getSteps(options);
+    const nodes = api.getNodes(options);
+    const keys = steps.map((step) => step.key);
+    const nodeIds = nodes.map((node) => node.nodeId);
+    const expectedNextAfterLoginCode = keys.includes('bind-email') ? 'bind-email' : 'confirm-oauth';
+
+    assert.equal(keys.includes('post-login-phone-verification'), false, `${label} should hide post-login phone step`);
+    assert.equal(keys.includes('post-bound-email-phone-verification'), false, `${label} should hide bound-email phone step`);
+    assert.equal(nodeIds.includes('post-login-phone-verification'), false, `${label} nodes should hide post-login phone step`);
+    assert.equal(nodeIds.includes('post-bound-email-phone-verification'), false, `${label} nodes should hide bound-email phone step`);
+    assert.deepStrictEqual(
+      nodes.find((node) => node.nodeId === 'fetch-login-code')?.next,
+      [expectedNextAfterLoginCode],
+      `${label} fetch-login-code should link to the next non-phone node`
+    );
+  });
 });
 
 test('Plus session strategy swaps the OAuth tail for a single SUB2API import node', () => {

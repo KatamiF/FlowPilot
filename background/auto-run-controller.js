@@ -19,6 +19,7 @@
       getAutoRunStatusPayload,
       getErrorMessage,
       getFirstUnfinishedNodeId,
+      getNodeIdsForState,
       getPendingAutoRunTimerPlan,
       getRunningNodeIds,
       getState,
@@ -63,6 +64,78 @@
         return hasSavedNodeProgress(state.nodeStatuses || {}, state);
       }
       return false;
+    }
+
+    const EMPTY_REGISTRATION_EMAIL_STATE = Object.freeze({
+      current: '',
+      previous: '',
+      source: '',
+      updatedAt: 0,
+    });
+    const DONE_NODE_STATUSES = new Set(['completed', 'manual_completed', 'skipped']);
+
+    function isPhoneSignupFlow(state = {}) {
+      const signupMethod = String(state?.signupMethod || state?.resolvedSignupMethod || '').trim().toLowerCase();
+      return signupMethod === 'phone';
+    }
+
+    function getFullWorkflowNodeIds(state = {}) {
+      if (typeof getNodeIdsForState === 'function') {
+        const nodeIds = getNodeIdsForState(state);
+        if (Array.isArray(nodeIds) && nodeIds.length) {
+          return Array.from(new Set(
+            nodeIds
+              .map((nodeId) => String(nodeId || '').trim())
+              .filter(Boolean)
+          ));
+        }
+      }
+      return getKnownNodeIdsFromState(state);
+    }
+
+    function isFullWorkflowDone(state = {}) {
+      const nodeIds = getFullWorkflowNodeIds(state);
+      if (!nodeIds.length) {
+        return false;
+      }
+      const nodeStatuses = state?.nodeStatuses || {};
+      return nodeIds.every((nodeId) => (
+        DONE_NODE_STATUSES.has(String(nodeStatuses[nodeId] || 'pending').trim())
+      ));
+    }
+
+    async function clearPhoneSignupRuntimeAfterRoundSuccess() {
+      const currentState = await getState();
+      if (
+        !isPhoneSignupFlow(currentState)
+        || !isFullWorkflowDone(currentState)
+      ) {
+        return false;
+      }
+
+      await setState({
+        accountIdentifierType: null,
+        accountIdentifier: '',
+        currentPhoneActivation: null,
+        phoneNumber: '',
+        signupPhoneNumber: '',
+        signupPhoneActivation: null,
+        signupPhoneCompletedActivation: null,
+        signupPhoneVerificationRequestedAt: null,
+        signupPhoneVerificationPurpose: '',
+        currentPhoneVerificationCode: '',
+        currentPhoneVerificationCountdownEndsAt: 0,
+        currentPhoneVerificationCountdownWindowIndex: 0,
+        currentPhoneVerificationCountdownWindowTotal: 0,
+        email: null,
+        registrationEmailState: { ...EMPTY_REGISTRATION_EMAIL_STATE },
+        step8VerificationTargetEmail: '',
+        lastEmailTimestamp: null,
+        lastSignupCode: '',
+        lastLoginCode: '',
+        bindEmailSubmitted: false,
+      });
+      return true;
     }
 
     async function waitForRunningWorkflowNodesToFinish(payload = {}) {
@@ -158,8 +231,6 @@
         kiroRsKey: state.kiroRsKey,
         autoRunSkipFailures: state.autoRunSkipFailures,
         autoRunFallbackThreadIntervalMinutes: state.autoRunFallbackThreadIntervalMinutes,
-        autoRunDelayEnabled: state.autoRunDelayEnabled,
-        autoRunDelayMinutes: state.autoRunDelayMinutes,
         autoStepDelaySeconds: state.autoStepDelaySeconds,
         stepExecutionRangeByFlow: state.stepExecutionRangeByFlow,
         signupMethod: state.signupMethod,
@@ -502,7 +573,6 @@
       }, {
         autoRunSessionId: 0,
         autoRunTimerPlan: null,
-        scheduledAutoRunPlan: null,
       });
       clearStopRequest();
     }
@@ -701,6 +771,7 @@
               attemptRuns: attemptRun,
               continued: useExistingProgress,
             });
+            await clearPhoneSignupRuntimeAfterRoundSuccess();
 
             roundSummary.status = 'success';
             roundSummary.finalFailureReason = '';
@@ -1159,7 +1230,6 @@
         autoRunSessionId: 0,
         autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
         autoRunTimerPlan: null,
-        scheduledAutoRunPlan: null,
         ...getAutoRunStatusPayload(deps.getStopRequested() || stoppedEarly ? 'stopped' : 'complete', {
           currentRun: deps.getStopRequested() || stoppedEarly ? afterRuntime.autoRunCurrentRun : afterRuntime.autoRunTotalRuns,
           totalRuns: afterRuntime.autoRunTotalRuns,
